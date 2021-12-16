@@ -477,7 +477,39 @@ func (fz *Fuzzer) callStep(ec execCall) []reflect.Value {
 	// This contains the input values we previously created.
 	reflectArgs := []reflect.Value{}
 	for i := range ec.args {
-		reflectArgs = append(reflectArgs, *ec.args[i].val)
+		v := *ec.args[i].val
+
+		// For map, pointer, or slice, we disallow nil values to
+		// be passed in as args by creating a new object here if nil. Note that we are not setting up
+		// for example a map completely -- just making sure it is not nil.
+		// In older versions, this arg nil check was emitted code someone could choose to delete.
+		// We could return and skip this call (closer to older emitted logic), but
+		// if we do that, we need to handle the outputslot broadcast channels for this call in case someone
+		// is waiting or will be waiting on a return value from this call.
+		// TODO: this is likely useful for Ptr, but less sure how useful this is for the other types here.
+		// TODO: test this better. inputs/race/race.go tests this for Ptr, but this is slightly annoying to test
+		// because fz.Fill avoids this. This occurs for example when the plan decides to reuse a call return
+		// value and that function under test returns a nil. In that case, fz.Fill is not the one creating the value.
+		// TODO: if we keep this, consider showing equivalent logic in the emitted repro logic, or maybe only when it matters.
+		// TODO: consider skipping this instead, and emit the nil check logic in the repro.
+		// TODO: make this configurable, including because people no longer have option of deleting the emitted nil checks.
+		switch v.Kind() {
+		case reflect.Ptr:
+			if v.IsNil() {
+				v = reflect.New(v.Type().Elem())
+			}
+		case reflect.Slice:
+			if v.IsNil() {
+				v = reflect.MakeSlice(v.Type(), 0, 0)
+			}
+		case reflect.Map:
+			if v.IsNil() {
+				v = reflect.MakeMapWithSize(v.Type(), 0)
+			}
+		case reflect.Interface:
+			// TODO: consider checking Interface too. Or better to keep passing the code under test a nil?
+		}
+		reflectArgs = append(reflectArgs, v)
 	}
 
 	// Call the user's func.

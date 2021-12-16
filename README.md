@@ -26,9 +26,10 @@ $ go install golang.org/dl/gotip@latest
 $ gotip download
 ```
 
-Download, compile, and install the fzgen binary from source:
+Download and install the fzgen binary from source, as well as add its fuzzer to our go.mod:
 ```
 $ go install github.com/thepudds/fzgen/cmd/fzgen@latest
+$ go get github.com/thepudds/fzgen/fuzzer
 ```
 
 Use fzgen to automatically create a set of fuzz targets -- in this case for the encoding/ascii85 package from the Go standard library:
@@ -56,10 +57,10 @@ That's enough for you to get started on your own, but let's also briefly look at
 
 ## Example: Easily Finding a Data Race
 
-Again starting from an empty directory, we'll set up a module, and this time also add fzgen to the go.mod:
+Again starting from an empty directory, we'll set up a module, and add the fzgen fuzzer to go.mod:
 ```
 $ go mod init temp
-$ go get go get github.com/thepudds/fzgen
+$ go get github.com/thepudds/fzgen/fuzzer
 ```
 
 Next, we automatically create a new fuzz target. This time:

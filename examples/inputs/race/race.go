@@ -7,7 +7,7 @@
 //     3. The two Loads must happen concurrently.
 //     4. Prior to the two Loads, no other Store can update the key to have a non-matching payload.
 //
-// Using the fzgen/fuzzer.Chain created by default via 'fzgen -chain -parallel -pkg=github.com/thepudds/fzgen/examples/inputs/race',
+// Using the fzgen/fuzzer.Chain created by default via 'fzgen -chain -parallel github.com/thepudds/fzgen/examples/inputs/race',
 // this data race is typically caught after a few minutes of fuzzing with '-race' when starting from scratch.
 package raceexample
 
@@ -32,7 +32,7 @@ func (m *MySafeMap) Load(key [16]byte) *Request {
 	if ok {
 		req := r.(*Request)
 		if req.Answer == 42 {
-			// DATA RACE (but requires: matching store/load keys, and concurrent matching load keys, and certain payload data)
+			// DATA RACE (but detection requires: matching store/load keys, and concurrent matching load keys, and certain payload data)
 			req.deepQuestion++
 		}
 		return req
