@@ -1,7 +1,6 @@
-// genfuzzfuncs is an early stage prototype for automatically generating
-// fuzz functions, similar in spirit to cweill/gotests.
+// fzgen automatically generates fuzz functions, similar in spirit to cweill/gotests.
 //
-// For example, if you run genfuzzfuncs against github.com/google/uuid, it generates
+// For example, if you run fzgen against github.com/google/uuid, it generates
 // a uuid_fuzz.go file with 30 or so functions like:
 //
 //   func Fuzz_UUID_MarshalText(u1 uuid.UUID) {
@@ -19,7 +18,7 @@
 // using the rich signature fuzzing support in thepudds/fzgo, such as:
 //
 //  fzgo test -fuzz=. ./...
-package main
+package fzgen
 
 import (
 	"flag"
@@ -28,58 +27,74 @@ import (
 	"os"
 )
 
-// one way to test this on the stdlib:
-//   for x in $(go list std | egrep -v 'internal|runtime|unsafe|vendor|image/color/palette'); do start=$(pwd); echo $x; mkdir -p $x; cd $x ; genfuzzfuncs -pkg=$x -o=fuzz.go && go build || echo "--- FAILED $x ---"; cd $start; done
+// one way to test this is against the stdlib (here, this just tests that fzgen generates and the result compiles successfully):
+//   for x in $(go list std | egrep -v 'internal|runtime|unsafe|vendor|image/color/palette'); do start=$(pwd); echo $x; mkdir -p $x; cd $x ; fzgen $x && gotip test . || echo "--- FAILED $x ---"; cd $start; done &> out.txt
 // current stats:
 //   grep -r '^func Fuzz' | wc -l
 //   2775
 //   grep -r 'skipping' | wc -l
 //   603
-// to also test that fzgo can build the resulting rich signatures
-//   mkdir ~/go/src/fzgo.test
-//   cd ~/go/src/fzgo.test
-//   for x in $(go list std | egrep -v 'internal|runtime|unsafe|vendor|image/color/palette'); do start=$(pwd); echo $x; mkdir -p $x; cd $x ; genfuzzfuncs -pkg=$x -o=fuzz.go && go build && fzgo test -fuzz=. -c || echo "--- FAILED $x ---"; cd $start; done
 
 // Usage contains short usage information.
 var Usage = `
-usage:
-	genfuzzfuncs [-pkg=pkgPattern] [-func=regexp] [-unexported] [-qualifyall] [-ctors=false] [-ctorspattern=regexp]
+Usage:
+	fzgen [-chain] [-parallel] [-ctor=<target-constructor-regexp>] [-unexported] [pkg]
 	
-Running genfuzzfuncs without any arguments targets the package in the current directory.
+Running fzgen without any arguments targets the package in the current directory.
 
-genfuzzfuncs outputs a set of wrapper functions for all functions
-matching the func regex in the target package, which defaults to current directory.
-Any function that already starts with 'Fuzz' is skipped, and so are any functions
-with zero parameters or that have interface parameters.
+fzgen outputs a set of wrapper fuzz functions for all functions matching
+the -func regexp, which defaults to matching all functions. The target package
+defaults to the current directory. The target package should be in the current 
+module or listed as dependency of the current module (e.g., via 'go get example.com/foo').
 
 The resulting wrapper functions will all start with 'Fuzz', and are candidates 
-for use with fuzzing via thepudds/fzgo.
+for use with fuzzing via Go 1.18 cmd/go (e.g., 'gotip test -fuzz=.').
 
-genfuzzfuncs does not attempt to populate imports, but 'goimports -w <file>' 
-should usaully be able to do so.
+A package pattern is allowed, but should only match one package.
+
+Test functions and any function that already starts with 'Fuzz' are skipped,
+as are functions that have unsupported parameters such as a channel.
 
 `
 
-func main() {
+func FzgenMain() int {
 	// handle flags
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, Usage)
 		flag.PrintDefaults()
 	}
-	pkgFlag := flag.String("pkg", ".", "package pattern, defaults to current package")
-	funcFlag := flag.String("func", ".", "function regex, defaults to matching all")
+
+	// Most commonly used:
+	chainFlag := flag.Bool("chain", false, "loop over the methods of an object, which requires finding a suitable constructor in the same package and which is controllable via the -ctor flag.")
+	parallelFlag := flag.Bool("parallel", false, "indicates an emitted chain can be run in parallel. requires -chain")
+	outFileFlag := flag.String("o", "autofuzz_test.go", "output file name. defaults to autofuzz_test.go or autofuzzchain_test.go")
+	constructorPatternFlag := flag.String("ctor", "^New", "regexp to use if searching for constructors to automatically use.")
+
+	// Less commonly used:
+	funcPatternFlag := flag.String("func", ".", "function regex, defaults to matching all candidate functions")
 	unexportedFlag := flag.Bool("unexported", false, "emit wrappers for unexported functions in addition to exported functions")
 	qualifyAllFlag := flag.Bool("qualifyall", true, "all identifiers are qualified with package, including identifiers from the target package. "+
 		"If the package is '.' or not set, this defaults to false. Else, it defaults to true.")
-	constructorFlag := flag.Bool("ctors", true, "automatically insert constructors when wrapping a method call "+
+	constructorFlag := flag.Bool("ctorinject", true, "automatically insert constructors when wrapping a method call "+
 		"if a suitable constructor can be found in the same package.")
-	constructorPatternFlag := flag.String("ctorspattern", "^New", "regexp to use if searching for constructors to automatically use.")
-	outFileFlag := flag.String("o", "autogeneratedfuzz.go", "output file name.")
 
 	flag.Parse()
-	if len(flag.Args()) != 0 {
+
+	var pkgPattern string
+	switch {
+	case flag.NArg() > 1:
+		fmt.Println("fzgen: only one package pattern argument is allowed, and it must match only one package")
 		flag.Usage()
-		os.Exit(2)
+		return 2
+	case flag.NArg() == 1:
+		pkgPattern = flag.Arg(0)
+	default:
+		pkgPattern = "."
+	}
+
+	if *parallelFlag && !*chainFlag {
+		fmt.Fprintf(os.Stderr, "fzgen: error: -parallel flag requires -chain")
+		return 2
 	}
 
 	// search for functions in the requested package that
@@ -89,7 +104,7 @@ func main() {
 		options |= flagRequireExported
 	}
 	var qualifyAll bool
-	if *pkgFlag == "." {
+	if pkgPattern == "." {
 		qualifyAll = false
 	} else {
 		// qualifyAllFlag defaults to true, which is what we want
@@ -97,8 +112,9 @@ func main() {
 		qualifyAll = *qualifyAllFlag
 	}
 
-	functions, err := FindFunc(*pkgFlag, *funcFlag, nil, options)
+	functions, err := findFunc(pkgPattern, *funcPatternFlag, nil, options)
 	if err != nil {
+		// TODO: probably return 1 instead in order to work better with testscripts?
 		fail(err)
 	}
 
@@ -106,20 +122,32 @@ func main() {
 		qualifyAll:         qualifyAll,
 		insertConstructors: *constructorFlag,
 		constructorPattern: *constructorPatternFlag,
+		parallel:           *parallelFlag,
 	}
 
-	out, err := createWrappers(*pkgFlag, functions, wrapperOpts)
+	var out []byte
+	if !*chainFlag {
+		out, err = emitIndependentWrappers(pkgPattern, functions, wrapperOpts)
+	} else {
+		out, err = emitChainWrappers(pkgPattern, functions, wrapperOpts)
+	}
 	if err != nil {
 		fail(err)
 	}
-	err = ioutil.WriteFile(*outFileFlag, out, 0644)
+
+	if *chainFlag && *outFileFlag == "autofuzz_test.go" {
+		*outFileFlag = "autofuzzchain_test.go"
+	}
+	err = ioutil.WriteFile(*outFileFlag, out, 0o644)
 	if err != nil {
 		fail(err)
 	}
+	fmt.Println("fzgen: created", *outFileFlag)
 
+	return 0
 }
 
 func fail(err error) {
-	fmt.Fprintf(os.Stderr, "genfuzzfuncs: error: %v\n", err)
+	fmt.Fprintf(os.Stderr, "fzgen: error: %v\n", err)
 	os.Exit(1)
 }

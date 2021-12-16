@@ -1,94 +1,74 @@
 // Package randparam allows a []byte to be used as a source of random parameter values.
 //
-// The primary use case is to allow fzgo to use dvyukov/go-fuzz to fuzz rich signatures such as:
-//    FuzzFunc(re string, input string, posix bool)
-// google/gofuzz is used to walk the structure of parameters, but randparam uses custom random generators,
-// including in the hopes of allowing dvyukov/go-fuzz literal injection to work,
-// as well as to better exploit the genetic mutations of dvyukov/go-fuzz, etc.
+// The primary use case is to allow thepudds/fzgen to automatically generate fuzzing functions
+// for rich signatures such as:
+//    regexp.MatchReader(pattern string, r io.RuneReader)
+//
+// randparam fills in common top-level interfaces such as io.Reader, io.Writer, io.ReadWriter, and so on.
+// See SupportedInterfaces for current list.
+//
+// This package predates builtin cmd/go fuzzing support, and originally
+// was targeted at use by thepudds/fzgo, which was a working prototype of an earlier "first class fuzzing in cmd/go" proposal,
+// (There is still some baggage left over from that earlier world).
 package randparam
 
 import (
+	"bytes"
+	"context"
 	"fmt"
-	"math/rand"
-
-	gofuzz "github.com/google/gofuzz"
+	"io"
+	"io/ioutil"
+	"math"
+	"reflect"
 )
 
-// Fuzzer generates random values for public members.
-// It wires together dvyukov/go-fuzz (for randomness, instrumentation, managing corpus, etc.)
-// with google/gofuzz (for walking a structure recursively), though it uses functions from
-// this package to actually fill in string, []byte, and number values.
-type Fuzzer struct {
-	gofuzzFuzzer *gofuzz.Fuzzer
+// SupportedInterfaces enumerates interfaces that can be filled by Fill(&obj).
+var SupportedInterfaces = map[string]bool{
+	"io.Writer":       true,
+	"io.Reader":       true,
+	"io.ReaderAt":     true,
+	"io.WriterTo":     true,
+	"io.Seeker":       true,
+	"io.ByteScanner":  true,
+	"io.RuneScanner":  true,
+	"io.ReadSeeker":   true,
+	"io.ByteReader":   true,
+	"io.RuneReader":   true,
+	"io.ByteWriter":   true,
+	"io.ReadWriter":   true,
+	"io.ReaderFrom":   true,
+	"io.StringWriter": true,
+	"io.Closer":       true,
+	"io.ReadCloser":   true,
+	"context.Context": true,
 }
 
-// randFuncs is a list of our custom variable generation functions
-// that tap into our custom random number generator to pull values from
-// the initial input []byte.
-var randFuncs = []interface{}{
-	randInt,
-	randInt8,
-	randInt16,
-	randInt32,
-	randInt64,
-	randUint,
-	randUint8,
-	randUint16,
-	randUint32,
-	randUint64,
-	randFloat32,
-	randFloat64,
-	randByte,
-	randRune,
+// Fuzzer generates random values for public members.
+// It allows wiring together cmd/go fuzzing or dvyukov/go-fuzz (for randomness, instrumentation, managing corpus, etc.)
+// with the ability to fill in common interfaces, as well as string, []byte, and number values.
+type Fuzzer struct {
+	fzgoSrc *randSource
 }
 
 // NewFuzzer returns a *Fuzzer, initialized with the []byte as an input stream for drawing values via rand.Rand.
 func NewFuzzer(data []byte) *Fuzzer {
 	// create our random data stream that fill use data []byte for results.
 	fzgoSrc := &randSource{data}
-	randSrc := rand.New(fzgoSrc)
 
-	// create some closures for custom fuzzing (so that we have direct access to fzgoSrc).
-	randFuncsWithFzgoSrc := []interface{}{
-		func(ptr *[]byte, c gofuzz.Continue) {
-			randBytes(ptr, c, fzgoSrc)
-		},
-		func(ptr *string, c gofuzz.Continue) {
-			randString(ptr, c, fzgoSrc)
-		},
-		func(ptr *[]string, c gofuzz.Continue) {
-			randStringSlice(ptr, c, fzgoSrc)
-		},
+	f := &Fuzzer{
+		fzgoSrc: fzgoSrc,
 	}
 
-	// combine our two custom fuzz function lists.
-	funcs := append(randFuncs, randFuncsWithFzgoSrc...)
-
-	// create the google/gofuzz fuzzer
-	gofuzzFuzzer := gofuzz.New().RandSource(randSrc).Funcs(funcs...)
-
-	// gofuzzFuzzer.NilChance(0).NumElements(2, 2)
-	// TODO: pick parameters for NilChance, NumElements, e.g.:
-	//     gofuzzFuzzer.NilChance(0.1).NumElements(0, 10)
+	// TODO: probably have parameters for number of elements.NilChance, NumElements, e.g.:
 	// Initially allowing too much variability with NumElements seemed
 	// to be a problem, but more likely that was an early indication of
 	// the need to better tune the exact string/[]byte encoding to work
 	// better with sonar.
 
-	// TODO: consider if we want to use the first byte for meta parameters.
-	firstByte := fzgoSrc.Byte()
-	switch {
-	case firstByte < 32:
-		gofuzzFuzzer.NilChance(0).NumElements(2, 2)
-	case firstByte < 64:
-		gofuzzFuzzer.NilChance(0).NumElements(1, 1)
-	case firstByte < 96:
-		gofuzzFuzzer.NilChance(0).NumElements(3, 3)
-	case firstByte < 128:
-		gofuzzFuzzer.NilChance(0).NumElements(4, 4)
-	case firstByte <= 255:
-		gofuzzFuzzer.NilChance(0.1).NumElements(0, 10)
-	}
+	// TODO: consider if we want to use the first byte for meta parameters like
+	// forcing count of slices like we used to do in fzgo.and so.
+	// We still draw the first byte here to reserve it.
+	fzgoSrc.Byte()
 
 	// TODO: probably delete the alternative string encoding code.
 	// Probably DON'T have different string encodings.
@@ -98,29 +78,124 @@ func NewFuzzer(data []byte) *Fuzzer {
 	// 	fzgoSrc.lengthEncodedStrings = false
 	// }
 
-	f := &Fuzzer{gofuzzFuzzer: gofuzzFuzzer}
 	return f
 }
 
-// Fuzz fills in public members of obj. For numbers, strings, []bytes, it tries to populate the
-// obj value with literals found in the initial input []byte.
-func (f *Fuzzer) Fuzz(obj interface{}) {
-	f.gofuzzFuzzer.Fuzz(obj)
+// Remaining reports how many bytes remain in our original input []byte.
+func (f *Fuzzer) Remaining() int {
+	return f.fzgoSrc.Remaining()
 }
 
-// Fill fills in public members of obj. For numbers, strings, []bytes, it tries to populate the
-// obj value with literals found in the initial input []byte.
-// TODO: decide to call this Fill or Fuzz or something else. We support both Fill and Fuzz for now.
-func (f *Fuzzer) Fill(obj interface{}) {
-	f.gofuzzFuzzer.Fuzz(obj)
+// Drain removes the next n bytes from the input []byte.
+// If n is greater than Remaining, it drains all remaining bytes.
+func (f *Fuzzer) Drain(n int) {
+	f.fzgoSrc.Drain(n)
 }
 
-// Override google/gofuzz fuzzing approach for strings, []byte, and numbers
+// Data returns a []byte covering the remaining bytes from
+// the original input []byte. Any bytes that are considered
+// consumed should be indicated via Drain.
+func (f *Fuzzer) Data() []byte {
+	return f.fzgoSrc.Data()
+}
 
-// randBytes is a custom fill function so that we have exact control over how
+// fillInterface reports if it has filled an interface pointer.
+//
+// Note: keep in sync with SupportedInterfaces (TODO: consider making dynamic).
+//
+// Rough counts of most common interfaces in public funcs/methods For stdlib
+//   (based on output from early version of fzgo that skipped all interfaces):
+//   $ grep -r 'skipping' | awk '{print $10}'  | grep -v 'func' | sort | uniq -c | sort -rn | head -20
+// 		146 io.Writer
+// 		122 io.Reader
+// 		 75 reflect.Type
+// 		 64 go/types.Type
+// 		 55 interface{}
+// 		 44 context.Context
+// 		 41 []interface{}
+// 		 22 go/constant.Value
+// 		 17 net.Conn
+// 		 17 math/rand.Source
+// 		 16 net/http.ResponseWriter
+// 		 16 net/http.Handler
+// 		 16 image/color.Color
+// 		 13 io.ReadWriteCloser
+// 		 13 error
+// 		 12 image/color.Palette
+// 		 11 io.ReaderAt
+// 		  9 crypto/cipher.Block
+// 		  8 net.Listener
+// 		  6 go/ast.Node
+//
+func (f *Fuzzer) fillInterface(obj interface{}) bool {
+	var b []byte
+	switch v := obj.(type) {
+	// Cases using bytes.NewReader
+	case *io.Reader:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.ReaderAt:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.WriterTo:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.Seeker:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.ByteScanner:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.RuneScanner:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.ReadSeeker:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.ByteReader:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+	case *io.RuneReader:
+		f.Fill(&b)
+		*v = bytes.NewReader(b)
+
+	// Cases using bytes.NewBuffer
+	case *io.ByteWriter:
+		f.Fill(&b)
+		*v = bytes.NewBuffer(b)
+	case *io.ReadWriter: // TODO: consider a bytes.Reader + ioutil.Discard?
+		f.Fill(&b)
+		*v = bytes.NewBuffer(b)
+	case *io.ReaderFrom:
+		f.Fill(&b)
+		*v = bytes.NewBuffer(b)
+	case *io.StringWriter:
+		f.Fill(&b)
+		*v = bytes.NewBuffer(b)
+
+	// Cases using ioutil.NopCloser(bytes.NewReader)
+	case *io.Closer:
+		f.Fill(&b)
+		*v = ioutil.NopCloser(bytes.NewReader(b))
+	case *io.ReadCloser:
+		f.Fill(&b)
+		*v = ioutil.NopCloser(bytes.NewReader(b))
+
+	// Cases using context.Background
+	case *context.Context:
+		*v = context.Background()
+
+	// No match
+	default:
+		return false
+	}
+	return true
+}
+
+// fillByteSlice is a custom fill function so that we have exact control over how
 // strings and []byte are encoded.
 //
-// randBytes generates a byte slice using the input []byte stream.
+// fillByteSlice generates a byte slice using the input []byte stream.
 // []byte are deserialized as length encoded, where a leading byte
 // encodes the length in range [0-255], but the exact interpretation is a little subtle.
 // There is surely room for improvement here, but this current approach is the result of some
@@ -177,7 +252,7 @@ func (f *Fuzzer) Fill(obj interface{}) {
 //      * that non-zero byte is the actual length used, unless that non-zero byte
 //	      is 0xFF, in which case that signals a zero-length string/[]byte, and
 //      * the length value used must be able to draw enough real random bytes from the input []byte.
-func randBytes(ptr *[]byte, c gofuzz.Continue, fzgoSrc *randSource) {
+func (f *Fuzzer) fillByteSlice(ptr *[]byte) {
 	verbose := false // TODO: probably remove eventually.
 	if verbose {
 		fmt.Println("randBytes verbose:", verbose)
@@ -191,18 +266,17 @@ func randBytes(ptr *[]byte, c gofuzz.Continue, fzgoSrc *randSource) {
 	// mainly in order to better work with go-fuzz sonar.
 	// see long comment above.
 	for {
-		if fzgoSrc.Remaining() == 0 {
+		if f.Remaining() == 0 {
 			if verbose {
 				fmt.Println("ran out of bytes, 0 remaining")
 			}
 			// return nil slice (which will be empty string for string)
 			*ptr = nil
 			return
-
 		}
 
 		// draw a size in [0, 255] from our input byte[] stream
-		sizeField := int(fzgoSrc.Byte())
+		sizeField := int(f.fzgoSrc.Byte())
 		if verbose {
 			fmt.Println("sizeField:", sizeField)
 		}
@@ -210,14 +284,14 @@ func randBytes(ptr *[]byte, c gofuzz.Continue, fzgoSrc *randSource) {
 		// If we don't have enough data, we want to
 		// *not* use the size field or the data after sizeField,
 		// in order to work better with sonar.
-		if sizeField > fzgoSrc.Remaining() {
+		if sizeField > f.Remaining() {
 			if verbose {
 				fmt.Printf("%d bytes requested via size field, %d remaining, drain rest\n",
-					sizeField, fzgoSrc.Remaining())
+					sizeField, f.Remaining())
 			}
 			// return nil slice (which will be empty string for string).
 			// however, before we return, we consume all of our remaining bytes.
-			fzgoSrc.Drain()
+			f.Drain(f.Remaining())
 
 			*ptr = nil
 			return
@@ -244,23 +318,23 @@ func randBytes(ptr *[]byte, c gofuzz.Continue, fzgoSrc *randSource) {
 
 	bs = make([]byte, size)
 	for i := range bs {
-		bs[i] = fzgoSrc.Byte()
+		bs[i] = f.fzgoSrc.Byte()
 	}
 	*ptr = bs
 }
 
-// randString is a custom fill function so that we have exact control over how
+// fillString is a custom fill function so that we have exact control over how
 // strings are encoded. It is a thin wrapper over randBytes.
-func randString(s *string, c gofuzz.Continue, fzgoSrc *randSource) {
+func (f *Fuzzer) fillString(s *string) {
 	var bs []byte
-	randBytes(&bs, c, fzgoSrc)
+	f.fillByteSlice(&bs)
 	*s = string(bs)
 }
 
 // TODO: this might be temporary. Here we handle slices of strings as a preview of
-// improvements we might get by dropping google/gofuzz for walking some of the data structures.
-func randStringSlice(s *[]string, c gofuzz.Continue, fzgoSrc *randSource) {
-	size, ok := calcSize(fzgoSrc)
+// some possible performance improvements.
+func (f *Fuzzer) fillStringSlice(s *[]string) {
+	size, ok := f.calcSize(f.fzgoSrc)
 	if !ok {
 		*s = nil
 		return
@@ -268,14 +342,14 @@ func randStringSlice(s *[]string, c gofuzz.Continue, fzgoSrc *randSource) {
 	ss := make([]string, size)
 	for i := range ss {
 		var str string
-		randString(&str, c, fzgoSrc)
+		f.fillString(&str)
 		ss[i] = str
 	}
 	*s = ss
 }
 
 // TODO: temporarily extracted this from randBytes. Decide to drop vs. keep/unify.
-func calcSize(fzgoSrc *randSource) (size int, ok bool) {
+func (f *Fuzzer) calcSize(fzgoSrc *randSource) (size int, ok bool) {
 	verbose := false // TODO: probably remove eventually.
 
 	// try to find a size field.
@@ -283,7 +357,7 @@ func calcSize(fzgoSrc *randSource) (size int, ok bool) {
 	// mainly in order to better work with go-fuzz sonar.
 	// see long comment above.
 	for {
-		if fzgoSrc.Remaining() == 0 {
+		if f.Remaining() == 0 {
 			if verbose {
 				fmt.Println("ran out of bytes, 0 remaining")
 			}
@@ -293,7 +367,7 @@ func calcSize(fzgoSrc *randSource) (size int, ok bool) {
 		}
 
 		// draw a size in [0, 255] from our input byte[] stream
-		sizeField := int(fzgoSrc.Byte())
+		sizeField := int(f.fzgoSrc.Byte())
 		if verbose {
 			fmt.Println("sizeField:", sizeField)
 		}
@@ -301,14 +375,14 @@ func calcSize(fzgoSrc *randSource) (size int, ok bool) {
 		// If we don't have enough data, we want to
 		// *not* use the size field or the data after sizeField,
 		// in order to work better with sonar.
-		if sizeField > fzgoSrc.Remaining() {
+		if sizeField > f.fzgoSrc.Remaining() {
 			if verbose {
 				fmt.Printf("%d bytes requested via size field, %d remaining, drain rest\n",
 					sizeField, fzgoSrc.Remaining())
 			}
 			// return nil slice (which will be empty string for string).
 			// however, before we return, we consume all of our remaining bytes.
-			fzgoSrc.Drain()
+			fzgoSrc.Drain(fzgoSrc.Remaining())
 
 			return 0, false
 		}
@@ -334,9 +408,317 @@ func calcSize(fzgoSrc *randSource) (size int, ok bool) {
 	return size, true
 }
 
+// =================== TEMP ===================
+
+// TODO: delete old implementation
+// // bytesToConsume calculates the bytes that should be
+// // used for a given numeric reflect.Value, and panics otherwise.
+// // reflect.Int always uses 8 bytes for consistency  across platforms.
+// func kindNumericSize(k reflect.Kind) int {
+// 	// recall, byte and rune are type aliases, and hence are convered.
+// 	switch k {
+// 	case reflect.Int, reflect.Int64, reflect.Uint64, reflect.Float64:
+// 		return 8
+// 	case reflect.Int32, reflect.Uint32, reflect.Float32:
+// 		return 4
+// 	case reflect.Int16, reflect.Uint16:
+// 		return 2
+// 	case reflect.Int8, reflect.Uint8:
+// 		return 1
+// 	default:
+// 		panic(fmt.Sprintf("fzgen: kindBytes: unexpected kind %v", k))
+// 	}
+// }
+
+// TODO: delete old implementations
+// func (f *Fuzzer) fillNumeric(v reflect.Value) {
+// 	bits := f.numericDraw(v.Kind())
+
+// 	// recall, byte and rune are type aliases, and hence are convered.
+// 	switch v.Kind() {
+// 	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
+// 		v.SetInt(int64(bits))
+// 	case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
+// 		v.SetUint(bits)
+// 	case reflect.Float64:
+// 		v.SetFloat(math.Float64frombits(bits))
+// 	case reflect.Float32:
+// 		v.SetFloat(float64(math.Float32frombits(uint32(bits))))
+// 	case reflect.Complex128, reflect.Complex64:
+// 		// TODO: handle complex?
+// 		panic("fzgen: fillNumeric: complex not yet implemented")
+// 	default:
+// 		panic(fmt.Sprintf("fzgen: fillNumeric: unexpected kind %v for value %v of type %v", v.Kind(), v, v.Type()))
+// 	}
+// }
+
+// TODO: delete old implementation
+// func (f *Fuzzer) fillInt64(v reflect.Value) {
+// 	consume := kindNumericSize(v.Kind())
+// 	if f.Remaining() < consume {
+// 		v.SetInt(0)
+// 		return
+// 	}
+// 	var i int64
+// 	b := f.Data()[:consume]
+// 	f.Drain(consume)
+// 	buf := bytes.NewReader(b)
+// 	binary.Read(buf, binary.LittleEndian, &i)
+// 	// i := int64(binary.LittleEndian.Uint64(b))
+// 	v.SetInt(i)
+// }
+
+func (f *Fuzzer) Fill(obj interface{}) {
+	f.Fill2(obj)
+}
+
+func (f *Fuzzer) Fill2(obj interface{}) {
+	v := reflect.ValueOf(obj)
+	if v.Kind() != reflect.Ptr {
+		panic("fzgen: Fill requires pointers")
+	}
+	// indirect through pointer, and rescursively fill
+	v = v.Elem()
+	f.fill(v, 0, fillOpts{})
+}
+
+type fillOpts struct {
+	panicOnUnsupported bool
+}
+
+func (f *Fuzzer) fill(v reflect.Value, depth int, opts fillOpts) {
+	depth++
+	if depth > 10 {
+		return
+	}
+
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// recall, rune is type alias of int32.
+		bits := f.numericDraw(v.Kind())
+		v.SetInt(int64(bits))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// recall, byte is type alias of uint8.
+		bits := f.numericDraw(v.Kind())
+		v.SetUint(bits)
+	case reflect.Float32:
+		bits := f.numericDraw(v.Kind())
+		v.SetFloat(float64(math.Float32frombits(uint32(bits))))
+	case reflect.Float64:
+		bits := f.numericDraw(v.Kind())
+		v.SetFloat(math.Float64frombits(bits))
+	case reflect.Complex64, reflect.Complex128:
+		var a, b float64
+		f.Fill(&a)
+		f.Fill(&b)
+		v.SetComplex(complex(a, b))
+	case reflect.String:
+		var s string
+		f.fillString(&s)
+		v.SetString(s)
+	case reflect.Bool:
+		var b byte
+		f.Fill(&b)
+		if b < 128 {
+			v.SetBool(false)
+		} else {
+			v.SetBool(true)
+		}
+	case reflect.Array:
+		if v.Type().Elem().String() == "uint8" {
+			// TODO: does this help? This is not consistent with other types, but we don't know size of elements for most other
+			// types (e.g., could be array of structs that have strings).
+			// At least for now, make it behave like older byte array fill, which only filled if there was enough
+			// remaining in the input data []byte.
+			if f.Remaining() < v.Len() {
+				break
+			}
+		}
+		for i := 0; i < v.Len(); i++ {
+			f.fill(v.Index(i), depth, opts)
+		}
+	case reflect.Slice:
+		if v.Type().Elem().String() == "uint8" {
+			var b []byte
+			f.fillByteSlice(&b)
+			v.Set(reflect.MakeSlice(v.Type(), len(b), len(b)))
+			for i := 0; i < v.Len(); i++ {
+				v.Index(i).SetUint(uint64(b[i]))
+			}
+		} else {
+			// TODO: favor smaller slice sizes?
+			// TODO: make slice size for non-byte slices more controllable via config. max is 10 for now.
+			var size byte
+			f.Fill(&size)
+			size %= 10
+			v.Set(reflect.MakeSlice(v.Type(), int(size), int(size)))
+			for i := 0; i < v.Len(); i++ {
+				f.fill(v.Index(i), depth, opts)
+			}
+		}
+	case reflect.Map:
+		// TODO: similar to slice - favor smaller, more configurable
+		var size byte
+		f.Fill(&size)
+		size %= 10
+		v.Set(reflect.MakeMapWithSize(v.Type(), int(size)))
+		for i := 0; i < int(size); i++ {
+			key := reflect.New(v.Type().Key()).Elem()
+			value := reflect.New(v.Type().Elem()).Elem()
+			f.fill(key, depth, opts)
+			f.fill(value, depth, opts)
+			v.SetMapIndex(key, value)
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if v.Field(i).CanSet() {
+				// TODO: could consider option for unexported fields
+				f.fill(v.Field(i), depth, opts)
+			}
+		}
+	case reflect.Interface:
+		// get back the &interface{}.
+		iface := v.Addr().Interface()
+		// see if we can fill it.
+		success := f.fillInterface(iface)
+		if !success && opts.panicOnUnsupported {
+			panic(fmt.Sprintf("fzgen: fill: unsupported interface kind %v for value %v of type %v", v.Kind(), v, v.Type()))
+		}
+	case reflect.Ptr:
+		// create a zero value elem, then recursively fill that
+		v.Set(reflect.New(v.Type().Elem()))
+		f.fill(v.Elem(), depth, opts)
+	case reflect.Uintptr, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		if opts.panicOnUnsupported {
+			panic(fmt.Sprintf("fzgen: fill: unsupported kind %v for value %v of type %v", v.Kind(), v, v.Type()))
+		}
+	case reflect.Invalid:
+		panic("fzgen: fill: reflect.Invalid object")
+	default:
+		panic(fmt.Sprintf("fzgen: fill: unexpected kind %v for value %v of type %v", v.Kind(), v, v.Type()))
+	}
+}
+
+// numericDraw calculates the bytes that should be
+// used for a given numeric reflect.Value. If there are not enough bytes
+// remaining in our data []byte, returns 0. Otherwise, returns
+// the bits corresponding to the proper size.
+// reflect.Int always uses 8 bytes for consistency across platforms.
+// This panics if not a numeric kind, or if called for a complex kind.
+// For complex kinds, instead draw two floats.
+func (f *Fuzzer) numericDraw(k reflect.Kind) (bits uint64) {
+	switch k {
+	case reflect.Int, reflect.Int64, reflect.Uint64, reflect.Float64:
+		// reflect.Int always uses 8 bytes for consistency  across platforms.
+		if f.Remaining() < 8 {
+			return 0
+		}
+		bits = uint64(f.fzgoSrc.Byte()) |
+			uint64(f.fzgoSrc.Byte())<<8 |
+			uint64(f.fzgoSrc.Byte())<<16 |
+			uint64(f.fzgoSrc.Byte())<<24 |
+			uint64(f.fzgoSrc.Byte())<<32 |
+			uint64(f.fzgoSrc.Byte())<<40 |
+			uint64(f.fzgoSrc.Byte())<<48 |
+			uint64(f.fzgoSrc.Byte())<<56
+	case reflect.Int32, reflect.Uint32, reflect.Float32:
+		if f.Remaining() < 4 {
+			return 0
+		}
+		bits = uint64(f.fzgoSrc.Byte()) |
+			uint64(f.fzgoSrc.Byte())<<8 |
+			uint64(f.fzgoSrc.Byte())<<16 |
+			uint64(f.fzgoSrc.Byte())<<24
+	case reflect.Int16, reflect.Uint16:
+		if f.Remaining() < 2 {
+			return 0
+		}
+		bits = uint64(f.fzgoSrc.Byte()) |
+			uint64(f.fzgoSrc.Byte())<<8
+	case reflect.Int8, reflect.Uint8:
+		if f.Remaining() < 1 {
+			return 0
+		}
+		bits = uint64(f.fzgoSrc.Byte())
+	default:
+		panic(fmt.Sprintf("fzgen: numericDraw: unexpected kind %v", k))
+	}
+	return bits
+}
+
+// ---- TODO: TEMP compound types ----
+
+func (f *Fuzzer) randByteArray4(val *[4]byte) {
+	if f.fzgoSrc.Remaining() < len(val) {
+		for _, i := range val {
+			val[i] = 0
+			return
+		}
+	}
+
+	for i := 0; i < len(val); i++ {
+		val[i] = f.fzgoSrc.Byte()
+	}
+}
+
+func (f *Fuzzer) randByteArray8(val *[8]byte) {
+	if f.fzgoSrc.Remaining() < len(val) {
+		for _, i := range val {
+			val[i] = 0
+			return
+		}
+	}
+
+	for i := 0; i < len(val); i++ {
+		val[i] = f.fzgoSrc.Byte()
+	}
+}
+
+func (f *Fuzzer) randByteArray16(val *[16]byte) {
+	if f.fzgoSrc.Remaining() < len(val) {
+		for _, i := range val {
+			val[i] = 0
+			return
+		}
+	}
+
+	for i := 0; i < len(val); i++ {
+		val[i] = f.fzgoSrc.Byte()
+	}
+}
+
+func (f *Fuzzer) randByteArray20(val *[20]byte) {
+	if f.fzgoSrc.Remaining() < len(val) {
+		for _, i := range val {
+			val[i] = 0
+			return
+		}
+	}
+
+	for i := 0; i < len(val); i++ {
+		val[i] = f.fzgoSrc.Byte()
+	}
+}
+
+func (f *Fuzzer) randByteArray32(val *[32]byte) {
+	if f.fzgoSrc.Remaining() < len(val) {
+		for _, i := range val {
+			val[i] = 0
+			return
+		}
+	}
+
+	for i := 0; i < len(val); i++ {
+		val[i] = f.fzgoSrc.Byte()
+	}
+}
+
+// TODO: delete older comments here.
+//
+// ---- Basic types ----
 // A set of custom numeric value filling funcs follows.
-// These are currently simple implementations that only use gofuzz.Continue
-// as a source for data, which means obtaining 64-bits of the input stream
+// These are currently simple implementations. When they used gofuzz.Continue
+// as a source for data, it meant obtaining 64-bits of the input stream
 // at a time. For sizes < 64 bits, this could be tighted up to waste less of the input stream
 // by getting access to fzgo/randparam.randSource.
 //
@@ -351,64 +733,3 @@ func calcSize(fzgoSrc *randSource) (size int, ok bool) {
 // TODO: The next bytes appended (via some mutation) after a number can change
 // the result (e.g., if a 0x2 is appended in example above, result is no longer 1),
 // so maybe better to also not draw zeros for numeric values?
-
-func randInt(val *int, c gofuzz.Continue) {
-	*val = int(c.Rand.Uint64())
-}
-
-func randInt8(val *int8, c gofuzz.Continue) {
-	*val = int8(c.Rand.Uint64())
-}
-
-func randInt16(val *int16, c gofuzz.Continue) {
-	*val = int16(c.Rand.Uint64())
-}
-
-func randInt32(val *int32, c gofuzz.Continue) {
-	*val = int32(c.Rand.Uint64())
-}
-
-func randInt64(val *int64, c gofuzz.Continue) {
-	*val = int64(c.Rand.Uint64())
-}
-
-func randUint(val *uint, c gofuzz.Continue) {
-	*val = uint(c.Rand.Uint64())
-}
-
-func randUint8(val *uint8, c gofuzz.Continue) {
-	*val = uint8(c.Rand.Uint64())
-}
-
-func randUint16(val *uint16, c gofuzz.Continue) {
-	*val = uint16(c.Rand.Uint64())
-}
-
-func randUint32(val *uint32, c gofuzz.Continue) {
-	*val = uint32(c.Rand.Uint64())
-}
-
-func randUint64(val *uint64, c gofuzz.Continue) {
-	*val = uint64(c.Rand.Uint64())
-}
-
-func randFloat32(val *float32, c gofuzz.Continue) {
-	*val = float32(c.Rand.Uint64())
-}
-
-func randFloat64(val *float64, c gofuzz.Continue) {
-	*val = float64(c.Rand.Uint64())
-}
-
-func randByte(val *byte, c gofuzz.Continue) {
-	*val = byte(c.Rand.Uint64())
-}
-
-func randRune(val *rune, c gofuzz.Continue) {
-	*val = rune(c.Rand.Uint64())
-}
-
-// Note: complex64, complex128, uintptr are not supported by google/gofuzz, I think.
-// TODO: Interfaces are also not currently supported by google/gofuzz, or at least not
-// easily as far as I am aware. That said, currently have most of the pieces elsewhere
-// for us to handle common interfaces like io.Writer, io.Reader, etc.

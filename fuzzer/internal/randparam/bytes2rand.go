@@ -16,9 +16,21 @@ func (s *randSource) Remaining() int {
 	return len(s.data)
 }
 
-// Drain removes all remaining bytes in the input []byte.
-func (s *randSource) Drain() {
-	s.data = nil
+// Drain removes the next n bytes from the input []byte.
+// If n is greater than Remaining, it drains all remaining bytes.
+func (s *randSource) Drain(n int) {
+	if len(s.data) >= n {
+		s.data = s.data[n:]
+	} else {
+		s.data = nil
+	}
+}
+
+// Data returns a []byte covering the remaining bytes from
+// the original input []byte. Any bytes that are considered
+// consumed should be indicated via Drain.
+func (s *randSource) Data() []byte {
+	return s.data
 }
 
 // PeekByte looks at the next byte without consuming it,

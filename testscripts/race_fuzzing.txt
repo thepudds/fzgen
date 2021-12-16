@@ -1,0 +1,85 @@
+# Test end-to-end fuzzing. This test focuses on data race detection via return reuse in fz.Chain.
+# See github.com/thepudds/fzgen/examples/inputs/race for comments about target.
+# Requires -end2end flag for 'go test'.
+#
+# Some test details:
+#   1. We assume a 1.18 gotip is in the path. (We exit early if no gotip is in path,
+#      or if it appears to be the wrong version).
+#   2. To just run this script, execute from the fzgen directory:
+#      go test -run=TestScripts/race_fuzzing -end2end
+#   3. Adding '-v -testwork' shows more detail, including the temp dir location,
+#      which will be left behind for inspection or manual debugging.
+
+[!exec:gotip$exe] skip 'skipping because no gotip found in path'
+
+# Validate result is Go 1.18+.
+exec gotip version
+# We do not envision a Go 2.
+stdout 'go version.*go1\.(1[8-9]|[2-9][0-9]|[1-9][0-9][0-9])'
+
+# Set up a usable module, including the run time dependency for fzgen/fuzzer
+# Note: we force use of our local copy of fzgen via a 'replace' directive.
+go mod init temp
+go mod edit -replace github.com/thepudds/fzgen=$FZLOCALDIR
+go get github.com/thepudds/fzgen/fuzzer
+go list -m all
+
+# Create our set of wrappers, which will be chainable.
+fzgen -chain -parallel github.com/thepudds/fzgen/examples/inputs/race
+exists autofuzzchain_test.go
+
+# TODO: consider making the cmd/go fuzzing deterministic with -parallel=1,
+# but based on current GODEBUG=fuzzseed=N implementation, not sure if that is useful here.
+# env GODEBUG=fuzzseed=1
+
+# TODO: ideally we would also start with an empty cached corpus, but 'env GOCACHE=$WORK' also slows down build/test currently.
+# Could manually clean cache globally or surgically, or ...
+
+# Let's go! 
+
+# First, emit the plan and repro for our saved crasher.
+env FZDEBUG=plan=1,repro=1
+! exec gotip test -run=/crasher -race
+stdout 'WARNING: DATA RACE'
+stdout 'MySafeMap\)\.Load'
+
+# Second, start fuzzing, which should also fail.
+env FZDEBUG=plan=0,repro=0
+! exec gotip test -fuzz=. -fuzztime=4s -race
+stdout 'race detected'
+
+# crasher (from run "race52", with loop under control of fuzzer):
+#
+# FZDEBUG=repro=1
+# gotip test -run=/90daf533e9 -race
+#
+# PLANNED STEPS: (sequential: false, loop count: 1, spin: true)
+#
+#        // Execute next steps in parallel.
+#        var wg sync.WaitGroup
+#        wg.Add(3)
+#
+#        go func() {
+#                defer wg.Done()
+#                Fuzz_MySafeMap_Store(
+#                        [16]uint8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+#                        &raceexample.Request{Answer:42,},
+#                )
+#        }()
+#        go func() {
+#                defer wg.Done()
+#                Fuzz_MySafeMap_Load(
+#                        [16]uint8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+#                )
+#        }()
+#        go func() {
+#                defer wg.Done()
+#                Fuzz_MySafeMap_Load(
+#                        [16]uint8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+#                )
+#        }()
+#        wg.Wait()
+
+-- testdata/fuzz/Fuzz_NewMySafeMap_Chain/crasher --
+go test fuzz v1
+[]byte("001000000<000000*\xe5")

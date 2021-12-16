@@ -1,27 +1,8 @@
-# 'fzgo help' shows fuzzing help
+# 'fzgen -h' shows fuzzing help. If there are multiple testscript failures including
+# this one, this is a good one to investiage first to see if there is a problem
+# with the testscript setup in general.
 
-# Exit early if -short was specified.
-[short] skip 'skipping help tests because -short was specified'
-
-! fzgo help 
-stdout '^fzgo is a simple prototype'
-stdout '^[ ]*-fuzz regexp'
-stdout '^[ ]*fuzz at most one function matching regexp'
-! stderr .+
-
-# 'fzgo' also shows fuzzing help
-! fzgo 
-stdout '^fzgo is a simple prototype'
-
-# 'fzgo -h' and 'fzgo --help' show fuzzing help
-! fzgo -h
-stdout '^fzgo is a simple prototype'
-! fzgo --help
-stdout '^fzgo is a simple prototype'
-
-# '-h' and '--help' with 'fzgo test -fuzz' show fuzzing help 
-! fzgo test -fuzz . --help
-stdout '^fzgo is a simple prototype'
-! fzgo test -fuzz . -h
-stdout '^fzgo is a simple prototype'
+fzgen -h
+stderr 'Usage'
+! stdout .+
 

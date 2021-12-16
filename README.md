@@ -1,133 +1,169 @@
-[![Build Status](https://travis-ci.org/thepudds/fzgo.svg?branch=master)](https://travis-ci.org/thepudds/fzgo) [![Go Report Card](https://goreportcard.com/badge/github.com/thepudds/fzgo)](https://goreportcard.com/report/github.com/thepudds/fzgo) 
+# fzgen
 
+fzgen auto-generates fuzzing wrappers for Go 1.18, optionally finds problematic API call sequences, can automatically wire outputs to inputs across API calls, and supports rich types such as structs, maps, slices, named types, and common interfaces.
 
-## fzgo: go-fuzz + 'go test' = fewer bugs
+## Why?
 
-If you are not familiar with fuzzing, this [motivation](http://tiny.cc/why-go-fuzz) document provides a quick 1-page introduction.
+Fewer bugs, happy Gophers.
 
-`fzgo` is a prototype of [golang/go#19109](https://golang.org/issue/19109) **"cmd/go: make fuzzing a first class citizen, like tests or benchmarks"**.
+Modern fuzzing has had a large amount of [success](https://events.linuxfoundation.org/wp-content/uploads/2017/11/Syzbot-and-the-Tale-of-Thousand-Kernel-Bugs-Dmitry-Vyukov-Google.pdf) and can be almost [eerily smart](https://lcamtuf.blogspot.com/2014/11/pulling-jpegs-out-of-thin-air.html), but has been most heavily used in the realm of security, often with a focus on [parsing untrusted inputs](https://google.github.io/oss-fuzz/faq/#what-kind-of-projects-are-you-accepting).
 
-`fzgo` supports some conveniences like fuzzing rich signatures and auto-generation of fuzzing functions.
+Security is critical, but:
 
-The basic approach is that `fzgo` integrates [dvyukov/go-fuzz](https://github.com/dvyukov/go-fuzz)
-into `go test`, with the heavy lifting being done by `go-fuzz`, `go-fuzz-build`, and the `go` tool. The focus 
-is on step 1 of a tentative list of "Draft goals for a prototype" outlined in [this
-comment](https://github.com/golang/go/issues/19109#issuecomment-441442080) on [#19109](https://golang.org/issue/19109):
+ 1. Eventually, the bigger success for fuzzing might be **finding correctness & stability problems** in a broader set of code bases, and beyond today's more common security focus.
+ 2. There is also a large opportunity to **make fuzzing easier to pick up** by a broader community.
 
-   _Step 1. Prototype proposed CLI, including interaction with existing 'go test'._
+This project aims to pitch in on those two fronts.
+
+If enough people work to make the fuzzing ecosystem accessible enough, "coffee break fuzzing" might eventually become as common as unit tests. And of course, increased adoption of fuzzing helps security as well. :blush:
+
+## Quick Start: Install & Automatically Create Fuzz Targets
+
+Starting from an empty directory, create a module and install the dev version of Go 1.18 via gotip:
+```
+$ go mod init example
+$ go install golang.org/dl/gotip@latest
+$ gotip download
+```
+
+Download, compile, and install the fzgen binary from source:
+```
+$ go install github.com/thepudds/fzgen/cmd/fzgen@latest
+```
+
+Use fzgen to automatically create a set of fuzz targets -- in this case for the encoding/ascii85 package from the Go standard library:
+```
+$ fzgen encoding/ascii85
+fzgen: created autofuzz_test.go
+```
+
+That's it -- now we can start fuzzing!
+```
+$ gotip test -fuzz=Fuzz_Encode
+```
+
+Within a few seconds, you should get a crash:
+```
+[...]
+fuzz: minimizing 56-byte failing input file
+fuzz: elapsed: 0s, minimizing
+--- FAIL: Fuzz_Encode (0.06s)
+```
+
+Without any manual work, you just found a bug in the standard library. (It's a very minor bug though -- probably at the level of "perhaps the doc could be more explicit about an expected panic").
+
+That's enough for you to get started on your own, but let's also briefly look at a more interesting example.
+
+## Example: Easily Finding a Data Race
+
+Again starting from an empty directory, we'll set up a module, and this time also add fzgen to the go.mod:
+```
+$ go mod init temp
+$ go get go get github.com/thepudds/fzgen
+```
+
+Next, we automatically create a new fuzz target. This time:
+ * We ask fzgen to "chain" a set of methods together in a calling sequence controlled by fzgen.Fuzzer (via the `-chain` argument).
+ * We also tell fzgen that it should in theory be safe to do parallel execution of those methods across multiple goroutines (via the `-parallel` argument).
+
+```
+$ fzgen -chain -parallel github.com/thepudds/fzgen/examples/inputs/race
+fzgen: created autofuzzchain_test.go
+```
+
+That's it! Let's get fuzzing. 
+
+This time, we also enable the race detector as we fuzz:
+```
+$ gotip test -fuzz=. -race
+```
+
+This is a harder challenge than our first example, but within several minutes or so, you should get a data race detected:
+```
+--- FAIL: Fuzz_NewMySafeMap (4.26s)
+    --- FAIL: Fuzz_NewMySafeMap (0.01s)
+        testing.go:1282: race detected during execution of test
+```
  
-`fzgo` supports the `-fuzz` flag and several other related flags proposed in the March 2017 
-[#19109 proposal document](https://github.com/golang/go/issues/19109#issuecomment-285456008). `fzgo` also supports typical `go` commands 
-such as `fzgo build`, `fzgo test`, or `fzgo env` (which are implemented by wrapping the `go` tool).
-
-Any and all feedback is welcome!
-
-### Features
-
-* Rich signatures like `FuzzRegexp(re string, input []byte, posix bool)` are supported, as well as the classic `Fuzz(data []byte) int` form used by `go-fuzz`. 
-* The corpus is automatically used as deterministic input to unit tests when running a normal `go test`. 
-* Individual corpus files can be unit tested via `fzgo test -fuzz=. -run=TestCorpus/<name>`.
-* `go-fuzz` requires a two step process. `fzgo` eliminates the separate manual preparation step.
-* `fzgo` automatically caches instrumented binaries in `GOPATH/pkg/fuzz` and re-uses them if possible.
-* The fuzzing corpus defaults to `GOPATH/pkg/fuzz/corpus`. 
-* The `-fuzzdir=/some/path` flag allows the corpus to be stored elsewhere (e.g., a separate corpus repo); `-fuzzdir=testdata` stores the corpus under `<pkgpath>/testdata/fuzz/fuzzname` (hence typically in VCS with the code under test).
-* `fuzz` and `gofuzz` build tags are allowed but not required.
-* An optional [genfuzzfuncs](https://github.com/thepudds/fzgo/blob/master/genfuzzfuncs/README.md) utility can automatically create fuzzing functions for all of the public functions and methods in a package of interest. This makes it quicker and easier to start fuzzing.
-
-## Usage
-```
-Usage: fzgo test [build/test flags] [packages] [build/test flags]
-
-Examples:
-
-   fzgo test                           # normal 'go test' of current package, plus run any corpus as unit tests
-   fzgo test -fuzz=.                   # fuzz the current package with a function starting with 'Fuzz'
-   fzgo test -fuzz=FuzzFoo             # fuzz the current package with a function matching 'FuzzFoo'
-   fzgo test ./... -fuzz=FuzzFoo       # fuzz a package in ./... with a function matching 'FuzzFoo'
-   fzgo test sample/pkg -fuzz=FuzzFoo  # fuzz 'sample/pkg' with a function matching 'FuzzFoo'
-
-Rich signatures like Fuzz(re string, input []byte, posix bool)` are supported, as well Fuzz(data []byte) int.
-Fuzz functions must start with 'Fuzz'.
-
-The following flags work with 'fzgo test -fuzz':
-
-   -fuzz regexp
-       fuzz at most one function matching regexp
-   -fuzzdir dir
-       store fuzz artifacts in dir (default pkgpath/testdata/fuzz)
-   -fuzztime d
-       fuzz for duration d (default unlimited)
-   -parallel n
-       start n fuzzing operations (default GOMAXPROCS)
-   -timeout d
-       fail an individual call to a fuzz function after duration d (default 10s, minimum 1s)
-   -c
-       compile the instrumented code but do not run it
-   -v
-       verbose: print additional output
-```  
-
-## Install
+If we want to see what exact calls triggered this, along with their input arguments, we can set a fzgen debug flag asking it to show us a reproducer, and then ask 'go test' to re-run the failing input that was just found. (Your failing example will almost certainly have a different filename and show a different pattern of calls).
 
 ```
-$ go get -u github.com/thepudds/fzgo/...
-$ go get -u github.com/dvyukov/go-fuzz/...
+$ export FZDEBUG=repro=1                   # On Windows:  set FZDEBUG=repro=1
+$ gotip test -run=./9800b52 -race
 ```
 
-Note: if you already have an older `dvyukov/go-fuzz`, you might need to first delete it from GOPATH as described in
-the [dvyukov/go-fuzz](https://github.com/dvyukov/go-fuzz#history-rewrite) repo.
+This will output a snippet of valid Go code that represents the reproducer:
+```go
+        // PLANNED STEPS (loop count: 1, spin: true)
 
-The `go-fuzz` source code must be in your GOPATH, and the `go-fuzz` and `go-fuzz-build` binaries must be 
-in your path environment variable.
+        Fuzz_MySafeMap_Store(
+                [16]uint8{152,152,152,152,152,152,152,152,152,152,152,152,152,152,152,152},
+                &raceexample.Request{Answer:42,},
+        )
 
-**Note**: Module-mode is not supported ([#15](https://github.com/thepudds/fzgo/issues/15)), but you can fuzz a module with `fzgo` as long as the code under test is in GOPATH and you set `GO111MODULE=off` env variable.
+        var wg sync.WaitGroup
+        wg.Add(2)
 
-## Status
+        // Execute next steps in parallel.
+        go func() {
+                defer wg.Done()
+                Fuzz_MySafeMap_Load(
+                        [16]uint8{152,152,152,152,152,152,152,152,152,152,152,152,152,152,152,152},
+                )
+        }()
+        go func() {
+                defer wg.Done()
+                Fuzz_MySafeMap_Load(
+                        [16]uint8{152,152,152,152,152,152,152,152,152,152,152,152,152,152,152,152},
+                )
+        }()
+        wg.Wait()
 
-This is a simple prototype. Don't expect great things.  ;-)
+        // Resume sequential execution.
+        Fuzz_MySafeMap_Load(
+                [16]uint8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+        )
 
-That said, there is reasonable test coverage and `fzgo` is hopefully beta quality. Automatically generating fuzz functions is implemented in a separate [genfuzzfuncs](https://github.com/thepudds/fzgo/blob/master/genfuzzfuncs/README.md) utility that is more alpha quality.
-
-Testing is primarily done with the nice internal `testscripts` package used by the core Go team to test the `go` tool
-and extracted at [rogpeppe/go-internal/testscript](https://github.com/rogpeppe/go-internal/tree/master/testscript).
-
-#### Changes from the proposal document
-
-The primary changes between the current fzgo prototype vs. the March 2017 [proposal document](https://github.com/golang/go/issues/19109#issuecomment-285456008):
-
-1. fzgo supports rich signatures.
-2. The corpus location does not default to `<pkgpath>/testdata/fuzz`, but instead follows the approach outlined [here](https://groups.google.com/d/msg/golang-fuzzing-proposal/WVyRXx7AsO4/CXzvbMT1CgAJ) and more precisely described in [PR #7](https://github.com/thepudds/fzgo/pull/7).
-3. Initially, fzgo disallowed multiple fuzz functions to match (per the March 2017 proposal),
-but as an experiment fzgo now allows multiple fuzz functions to match in order to 
-support something like 'go test -fuzz=. ./...' when there are multiple fuzz functions
-across multiple packages. Fuzzing happens in round-robin manner if multiple fuzz functions match.
-4. The proposal document suggested `GOPATH/pkg/GOOS_GOARCH_fuzz/` for a cache, but the prototype instead
-uses `GOPATH/pkg/fuzz/GOOS_GOARCH/`.
-5. The initial proposal document suggested generating new mutation-based inputs during `go test` when `-fuzz` was not specified. In order to keep `go test` deterministic, `fzgo` does not do that, but now does use the corpus as a deterministic set of inputs during `go test` when `-fuzz` is not specified.  Also, the proposal document suggested `-fuzzinput` as a way of specifying a file from the corpus to execute as a unit test. `fzgo` instead uses the normal `-run` argument to `go test`. For example, `fzgo test -run=TestCorpus/4fa128cf066f2a31 some/pkg` runs the any file in the `some/pkg` corpus with a filename matching `4fa128cf066f2a31`.
-6. Some of the commentators at [#19109](https://golang.org/issue/19109) suggested `-fuzztime duration` as a 
-way of controlling when to stop fuzzing. The proposal document does not include `-fuzztime` and `go-fuzz` 
-does not support it, but it seems useful in general and `-fuzztime` is in the prototype (and it proved 
-useful while testing the prototype). This might be removed later.
-7. For experimentation, `FZGOFLAGSBUILD` and `FZGOFLAGSFUZZ` environmental variables can optionally contain a space-separated list of arguments to pass to `go-fuzz-build` and `go-fuzz`, respectively.
-
-#### Pieces of proposal document not implemented in this prototype
-
-* `fuzz.F` or `testing.F` signature for fuzzing function.
-* Allowing fuzzing functions to reside in `*_test.go` files.
-* Anything to do with deeper integration with the compiler for more robust instrumentation. This
-prototype is not focused on that area.
-* Any of a much larger set of preexisting build flags like `-ldflags`, `-coverprofile`.
-* Areas covered in the March 2017 [proposal document](https://github.com/golang/go/issues/19109#issuecomment-285456008), 
-outside of the direct user-facing behavior that this prototype focuses on. That said, the majority of user-facing behavior mentioned in the proposal document is either implemented in the prototype or explicitly mentioned in this list as not implemented.
-
-The argument parsing in 'go test' is bespoke, and the argument parsing in `fzgo` is an approximation of that.
-That might be OK for an early prototype. The right thing to do might be to extract 
-[src/cmd/go/internal/test/testflag.go](https://golang.org/src/cmd/go/internal/test/testflag.go), 
-which includes this comment:
-
+[...]
+    --- FAIL: Fuzz_NewMySafeMap (0.01s)
+        testing.go:1282: race detected during execution of test
 ```
-// The flag handling part of go test is large and distracting.
-// We can't use the flag package because some of the flags from
-// our command line are for us, and some are for 6.out, and
-// some are for both.
-```
+
+Note that just running a regular test under the race detector might not catch this bug, including because the race detector [only finds data races that happen at runtime](https://go.dev/blog/race-detector), which means a diversity of code paths and input data is imporant for the race detector to do its job. Fzgen helps supply those code paths and data.
+
+For this particular [bug](https://github.com/thepudds/fzgen/blob/master/examples/inputs/race/race.go#L34-L36) to be observable by the race detector, it requires:
+
+  1. A Store must complete, then be followed by two Loads, and all three must use the same key.
+  2. The Store must have certain payload data (`Answer: 42`).
+  3. The two Loads must happen concurrently.
+  4. Prior to the two Loads, no other Store can update the key to have a non-matching payload.
+
+Here, the `42` seen in the reproducer must be `42`. On the other hand, the exact value of `152,152,152,...` in the key doesn't matter, but what does matter is that the same key value must be used across this sequence of three calls to trigger the bug. 
+
+fz.Chain has logic to sometimes re-use input arguments of the same type across different calls (e.g., to make it easier to have a meaningful `Get(key)` following a `Put(key)`), as well logic to feed outputs of one step as the input to a subsequent step, which is helpful in other cases.
+
+## Example: Finding a Real Concurrency Bug in Real Code
+
+The prior example was a small but challenging example that takes a few minutes of fuzzing to find, but you can see an example of a deadlock found in real code [here](https://github.com/thepudds/fzgen/blob/master/examples/outputs/race-xsync-map-repro/standalone_repro1_test.go) from the xsync.Map from github.com/puzpuzpuz/xsync.
+
+This deadlock gets reported after a few hours of running the [autogenchain_test.go](https://github.com/thepudds/fzgen/blob/master/examples/outputs/race-xsync-map/autofuzzchain_test.go) generated by fzgen. Interestingly, for any particular found reproducer, the deadlock might only then reproduce about 1 out of 1,000 attempts. 
+
+Fortunately, by pasting the output of `FZDEBUG=repro=1` into a [standalone_repro_test.go](https://github.com/thepudds/fzgen/blob/master/examples/outputs/race-xsync-map-repro/standalone_repro1_test.go) file and using the handy `-count` argument in a normal `go test -count=10000` invocation, we can then reproduce the deadlock cleanly on demand. At that point, the reproducer is completely standalone and does not rely on fzgen any longer.
+
+## fzgen status
+
+* fzgen is still a work in progress, but hopefully will soon be approaching beta quality. 
+* Emitting reproducers for a chain is currently best effort, but the intent is to improve to creating a complete standalone reproducer.
+* Corpus encoding in particular will change in the near term.
+* Roughly by the time of Go 1.18 graduates from Beta, the current intent is that fzgen will reach a 1.0 status.
+    * By 1.0, fzgen will have a stable corpus encoding, or an equivalent (such as perhaps the ability to programmatically set an encoding version number to keep using a corpus that is an older fzgen encoding).
+
+## What next?
+
+Any and all feedback is welcome! :grinning:
+
+Please feel free to open a new issue here, or to contact the author on Twitter ([@thepudds1](https://twitter.com/thepudds1)).
+
+The roadmap issue (TODO) in particular is a reasonable starting place. 
+
+If you made it this far -- thanks!

@@ -31,7 +31,6 @@ func TestRandSource_Uint64(t *testing.T) {
 			if gotValue2 := src.Uint64(); gotValue2 != tt.wantDraw2 {
 				t.Errorf("second RandSource.Uint64() = 0x%x, want 0x%x", gotValue2, tt.wantDraw2)
 			}
-
 		})
 	}
 }
