@@ -178,6 +178,6 @@ Any and all feedback is welcome! :grinning:
 
 Please feel free to open a new issue here, or to contact the author on Twitter ([@thepudds1](https://twitter.com/thepudds1)).
 
-The roadmap issue (TODO) in particular is a reasonable starting place. 
+The [Roadmap](https://github.com/thepudds/fzgen/wiki/Roadmap) wiki page in particular is a reasonable starting place. 
 
 If you made it this far -- thanks!
