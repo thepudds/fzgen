@@ -1,0 +1,32 @@
+# With thanks to https://github.com/rogpeppe/go-internal/blob/master/.github/workflows/test.yml
+
+on: [push, pull_request]
+name: Test
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: [1.17.x, 1.16.x]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        stable: false
+        go-version: ${{ matrix.go-version }}
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Test (standalone)
+      run: |
+        go test ./fuzzer/...
+        go test ./gen
+        go test ./...
+    - name: Test (end-to-end, with gotip)
+      run: |
+        go install golang.org/dl/gotip@latest
+        gotip download
+        gotip version
+        go test . -end2end
+        
