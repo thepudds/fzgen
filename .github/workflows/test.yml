@@ -23,7 +23,7 @@ jobs:
         go test ./fuzzer/...
         go test ./gen
         go test ./...
-        go install golang.org/dl/gotip
+        go install golang.org/dl/gotip@latest
         gotip download
         gotip version
         go test . -end2end
