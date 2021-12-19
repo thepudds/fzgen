@@ -18,12 +18,15 @@ jobs:
         go-version: ${{ matrix.go-version }}
     - name: Checkout code
       uses: actions/checkout@v2
-    - name: Test
+    - name: Test (standalone)
       run: |
         go test ./fuzzer/...
         go test ./gen
         go test ./...
+    - name: Test (end-to-end, with gotip)
+      run: |
         go install golang.org/dl/gotip@latest
         gotip download
         gotip version
         go test . -end2end
+        
