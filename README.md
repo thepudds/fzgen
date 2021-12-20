@@ -19,6 +19,8 @@ If enough people work to make the fuzzing ecosystem accessible enough, "coffee b
 
 ## Quick Start: Install & Automatically Create Fuzz Targets
 
+For now, the recommendation is to use Go 1.17 for almost all the commands here, and then use [gotip](https://pkg.go.dev/golang.org/dl/gotip) as shown when it is time to kick off the fuzzing.
+
 Starting from an empty directory, create a module and install the dev version of Go 1.18 via gotip:
 ```
 $ go mod init example
