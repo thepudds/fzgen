@@ -41,7 +41,8 @@ jobs:
     - name: Install Gotip
       run: |
         go version
-        go get golang.org/dl/gotip@latest
+        # gha currently defaulting to go 1.15. This would need to change for later version.
+        go get golang.org/dl/gotip
         gotip download
         gotip version
         echo "GOROOT=$(gotip env GOROOT)" >>$GITHUB_ENV
