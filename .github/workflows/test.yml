@@ -38,6 +38,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     continue-on-error: true
     steps:
+    - name: Set PATH
+      run: echo "$HOME/go/bin" >>$GITHUB_PATH
     - name: Install Gotip
       run: |
         go version
