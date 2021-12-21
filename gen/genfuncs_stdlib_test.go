@@ -4,7 +4,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"runtime"
-	"strings'
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
