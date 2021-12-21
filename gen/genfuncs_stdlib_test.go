@@ -1,11 +1,10 @@
-//go:build go1.17
-// +build go1.17
-
 package fzgen
 
 import (
 	"io/ioutil"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -14,8 +13,10 @@ import (
 func TestStrings(t *testing.T) {
 	if testing.Short() {
 		// TODO: probably remove this test at some point?
-		// It is long, and sensitive to changes in stdlib strings pkg.
-		t.Skip("skipping test in short mode. also, currently relies on strings package from Go 1.17")
+		t.Skip("skipping stdlib test in short mode")
+	}
+	if !strings.HasPrefix(runtime.Version(), "go1.17")  {
+		t.Skip("skipping stdlib test because it expects strings package from Go 1.17")
 	}
 	tests := []struct {
 		name               string // Note: we use the test name also as the golden filename
