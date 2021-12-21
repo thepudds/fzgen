@@ -640,7 +640,15 @@ func avoidCollision(v *types.Var, i int, localPkg *types.Package, allWrapperPara
 // paying attention to whether we are qualifying everything or not.
 func qualifiers(localPkg *types.Package, qualifyAll bool) (defaultQualifier, localQualifier types.Qualifier) {
 	localQualifier = func(pkg *types.Package) string {
-		if pkg == localPkg {
+		// We call pkg.Path() here because in some cases, such as the Options type from:
+		//    fzgen -func=Close$ -qualifyall=false tailscale.com/logtail/filch
+		// two packages that appear to be equal and have the same internal path field do not
+		// have pointer equality.
+		// The prior problem was the Options type would be emitted as 'filch.Options',
+		// rather than the expected 'Options'. Comparing paths here resolves that.
+		// TODO: understand better why two *Types.packages with same path do not have pointer equality.
+		// TODO: consider using types.RelativeTo, though that also does pointer equality test.
+		if pkg.Path() == localPkg.Path() {
 			return ""
 		}
 		return pkg.Name()
