@@ -48,6 +48,19 @@ func Fuzz_TypesNilCheck_WriteTo(f *testing.F) {
 	})
 }
 
+// skipping Fuzz_Discard because parameters include unsupported interface: []interface{}
+
+func Fuzz_Discard2(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var _x1 string
+		var _x2 []int
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&_x1, &_x2)
+
+		fuzzwrapexamples.Discard2(_x1, _x2...)
+	})
+}
+
 func Fuzz_InterfacesFullList(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		var x1 io.Writer

@@ -605,8 +605,8 @@ func avoidCollision(v *types.Var, i int, localPkg *types.Package, allWrapperPara
 	// or two parameters of the same name (e.g., if one was from a constructor and the other from the func under test).
 	paramName := v.Name()
 
-	if paramName == "_" {
-		// treat all underscore identifiers as colliding, and use something like "_x1" or "_x2" in their place.
+	if paramName == "_" || paramName == "" {
+		// treat all underscore or unnamed identifiers as colliding, and use something like "_x1" or "_x2" in their place.
 		// this avoids 'cannot use _ as value' errors for things like 'NotNilFilter(_ string, v reflect.Value)' stdlib ast package.
 		// an alternative would be to elide them when possible, but easier to retain, at least for now.
 		return fmt.Sprintf("_x%d", i+1)
