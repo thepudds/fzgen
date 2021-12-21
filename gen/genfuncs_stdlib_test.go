@@ -13,7 +13,7 @@ import (
 func TestStrings(t *testing.T) {
 	if testing.Short() {
 		// TODO: probably remove this test at some point?
-		t.Skip("skipping stdlib test in short mode)
+		t.Skip("skipping stdlib test in short mode")
 	}
 	if !strings.HasPrefix(runtime.Version(), "go1.17")  {
 		t.Skip("skipping stdlib test because it expects strings package from Go 1.17")
