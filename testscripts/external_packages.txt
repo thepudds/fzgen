@@ -1,0 +1,22 @@
+# Test some external packages to confirm bugs are fixed.
+#
+# To run just this:
+#   go test -run=TestScripts/external -end2end
+
+# Set up a usable module, including the run time dependency for fzgen/fuzzer
+# Note: we force use of our local copy of fzgen via a 'replace' directive.
+go mod init temp
+go mod edit -replace github.com/thepudds/fzgen=$FZLOCALDIR
+go get github.com/thepudds/fzgen/fuzzer
+go list -m all
+
+# Add the filch package from tailscale.com
+go get tailscale.com/logtail/filch@v1.18.2
+
+# Create wrappers, though force fzgen to treated filtch as a local package in the wrappers.
+fzgen -qualifyall=false tailscale.com/logtail/filch
+exists autofuzz_test.go
+
+# Check that we don't have an unexpectly package-qualified Options type used.
+grep 'var opts Options' autofuzz_test.go
+! grep 'var opts filch\.Options' autofuzz_test.go

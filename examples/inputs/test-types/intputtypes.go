@@ -106,3 +106,8 @@ func (n *TypesNilCheck) Interface(
 func (n *TypesNilCheck) WriteTo(stream io.Writer) (int64, error) {
 	return 0, nil
 }
+
+// Discard is modeled on tailscale.com/types/logger.Discard
+func Discard(string, ...interface{}) {}
+
+func Discard2(string, ...int) {}
