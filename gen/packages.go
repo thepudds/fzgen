@@ -12,21 +12,21 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// FindFuncFlag describes bitwise flags for FindFunc
+// findFuncFlag describes bitwise flags for findFunc.
 // TODO: this is a temporary fork from fzgo/fuzz.FindFunc.
-type FindFuncFlag uint
+type findFuncFlag uint
 
 const (
-	flagAllowMultiFuzz FindFuncFlag = 1 << iota
+	flagAllowMultiFuzz findFuncFlag = 1 << iota
 	flagRequireFuzzPrefix
 	flagExcludeFuzzPrefix
 	flagRequireExported
 )
 
 // findFunc searches for requested functions matching a package pattern and func pattern.
-// TODO: this is a temporary fork from fzgo/fuzz.findFunc.
+// TODO: this is a temporary fork from fzgo/fuzz.FindFunc.
 // TODO: maybe change flags to a predicate function?
-func findFunc(pkgPattern, funcPattern string, env []string, flags FindFuncFlag) ([]mod.Func, error) {
+func findFunc(pkgPattern, funcPattern string, env []string, flags findFuncFlag) ([]mod.Func, error) {
 	report := func(err error) error {
 		return fmt.Errorf("error while loading packages for pattern %v: %v", pkgPattern, err)
 	}
@@ -60,6 +60,7 @@ func findFunc(pkgPattern, funcPattern string, env []string, flags FindFuncFlag) 
 	// look for a func that starts with 'Fuzz' and matches our regexp.
 	// loop over the packages we found and loop over the Defs for each package.
 	for _, pkg := range pkgs {
+		pkgDir := ""
 		// TODO: consider alternative: "from a Package, look at Syntax.Scope.Objects and filter with ast.IsExported."
 		for id, obj := range pkg.TypesInfo.Defs {
 			// check if we have a func
@@ -95,9 +96,11 @@ func findFunc(pkgPattern, funcPattern string, env []string, flags FindFuncFlag) 
 						return nil, fmt.Errorf("multiple matches not allowed. multiple matches for pattern %v and func %v: %v.%v and %v.%v",
 							pkgPattern, funcPattern, pkg.PkgPath, id.Name, result[0].PkgPath, result[0].FuncName)
 					}
-					pkgDir, err := goListDir(pkg.PkgPath, env)
-					if err != nil {
-						return nil, report(err)
+					if pkgDir == "" {
+						pkgDir, err = goListDir(pkg.PkgPath, env)
+						if err != nil {
+							return nil, report(err)
+						}
 					}
 
 					function := mod.Func{
@@ -105,8 +108,6 @@ func findFunc(pkgPattern, funcPattern string, env []string, flags FindFuncFlag) 
 						TypesFunc: f,
 					}
 					result = append(result, function)
-
-					// keep chaining to see if we find another match
 				}
 			}
 		}
@@ -139,6 +140,35 @@ func goListDir(pkgPath string, env []string) (string, error) {
 	result := strings.TrimSpace(string(out))
 	if strings.Contains(result, "\n") {
 		return "", fmt.Errorf("multiple directory results for package %v", pkgPath)
+	}
+	return result, nil
+}
+
+// goList returns a list of packages for a package pattern.
+// There is probably a more refined way to do this, but it might do 'go list' anyway.
+func goList(dir string, args ...string) ([]string, error) {
+	cmdArgs := append([]string{"list"}, args...)
+	cmd := exec.Command("go", cmdArgs...)
+	cmd.Env = os.Environ()
+	cmd.Stderr = os.Stderr
+	if dir != "" {
+		cmd.Dir = dir
+	}
+
+	out, err := cmd.Output()
+	if err != nil {
+		// If this fails with a pkgPath as empty string, check packages.Config.Mode
+		fmt.Fprintf(os.Stderr, "fzgen: 'go list' failed for args %q:\n%s\n", args, string(out))
+		return nil, fmt.Errorf("failed to find package for args %q: %v", args, err)
+	}
+
+	var result []string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		result = append(result, line)
 	}
 	return result, nil
 }

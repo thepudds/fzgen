@@ -4,6 +4,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -49,7 +50,7 @@ func TestTypes(t *testing.T) {
 				constructorPattern: "^New",
 			}
 
-			out, err := emitIndependentWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -137,7 +138,7 @@ func TestConstructorInjection(t *testing.T) {
 				insertConstructors: tt.injectConstructors,
 				constructorPattern: "^New",
 			}
-			out, err := emitIndependentWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -218,7 +219,7 @@ func TestExported(t *testing.T) {
 				constructorPattern: "^New",
 			}
 
-			out, err := emitIndependentWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -239,6 +240,46 @@ func TestExported(t *testing.T) {
 			want := string(b)
 			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("createWrappers() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestHasPath(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		// test strings here originally taken from filepath.Dir test in go/src/path/filepath/path_test.go
+		{"abc", false},
+		{"", true},
+		{".", true},
+		{"..", true},
+		{"/.", true},
+		{"/", true},
+		{"////", true},
+		{"/foo", true},
+		{"x/", true},
+		{"./abc", true},
+		{"abc/def", true},
+		{"a/b/.x", true},
+		{"a/b/c.", true},
+		{"a/b/c.x", true},
+		{`c:\`, true},
+		{`c:.`, true},
+		{`c:a`, true},
+		{`c:\a\b`, true},
+		{`c:a\b`, true},
+		{`c:a\b\c`, true},
+		{`\\host\share`, true},
+		{`\\host\share\`, true},
+		{`\\host\share\a`, true},
+		{`\\host\share\a\b`, true},
+	}
+	for i, tt := range tests {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			if got := hasPath(tt.s); got != tt.want {
+				t.Errorf("isFilename(%q) = %v, want %v", tt.s, got, tt.want)
 			}
 		})
 	}
