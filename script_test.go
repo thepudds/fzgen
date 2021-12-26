@@ -2,6 +2,7 @@ package fzgen
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -12,7 +13,10 @@ import (
 	gen "github.com/thepudds/fzgen/gen"
 )
 
-var end2EndFlag = flag.Bool("end2end", false, "run longer end-to-end tests that assume a 1.18 gotip in PATH")
+var (
+	end2EndFlag = flag.Bool("end2end", false, "run longer end-to-end tests that assume a 1.18 gotip in PATH")
+	updateFlag  = flag.Bool("update", false, "update the second argument of any failing cmp commands in a testscript")
+)
 
 func TestMain(m *testing.M) {
 	os.Exit(testscript.RunMain(fzgenTestingMain{m}, map[string]func() int{
@@ -22,10 +26,12 @@ func TestMain(m *testing.M) {
 
 func TestScripts(t *testing.T) {
 	if !*end2EndFlag {
+		// TODO: probably push this check into the individual testscripts by setting FZEND2END env var for testscripts to check?
 		t.Skip("skipping longer end-to-end tests that assume a 1.18 gotip in PATH. use -end2end flag to run.")
 	}
 	p := testscript.Params{
-		Dir: "testscripts",
+		Dir:           "testscripts",
+		UpdateScripts: *updateFlag,
 		// For gotip from our path to work without re-downloading,
 		// we need a valid HOME env var. Testscripts default to HOME=/no-home
 		// If we don't do this here, get failure:
@@ -42,6 +48,7 @@ func TestScripts(t *testing.T) {
 			e.Vars = append(e.Vars,
 				homeEnvVar()+"="+home,
 				"FZLOCALDIR="+wd,
+				"FZEND2END="+fmt.Sprint(*end2EndFlag),
 			)
 			return nil
 		},

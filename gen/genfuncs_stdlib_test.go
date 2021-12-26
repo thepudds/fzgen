@@ -63,7 +63,7 @@ func TestStrings(t *testing.T) {
 				insertConstructors: tt.insertConstructors,
 				constructorPattern: "^New",
 			}
-			out, err := emitIndependentWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}

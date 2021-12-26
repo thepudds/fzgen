@@ -56,7 +56,7 @@ func TestChainRace(t *testing.T) {
 				parallel:           tt.parallel,
 			}
 
-			out, err := emitChainWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitChainWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -124,7 +124,7 @@ func TestChainUUID(t *testing.T) {
 				parallel:           tt.parallel,
 			}
 
-			out, err := emitChainWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitChainWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -186,7 +186,7 @@ func TestChainNilChecks(t *testing.T) {
 				parallel:           tt.parallel,
 			}
 
-			out, err := emitChainWrappers(pkgPattern, functions, wrapperOpts)
+			out, err := emitChainWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}

@@ -19,7 +19,7 @@ import (
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
 // type such as interface{}.
 // See package comment in main.go for more details.
-func emitChainWrappers(pkgPattern string, functions []mod.Func, options wrapperOptions) ([]byte, error) {
+func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
 	if len(functions) == 0 {
 		return nil, fmt.Errorf("no matching functions found")
 	}
@@ -63,12 +63,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, options wrapperO
 	}
 
 	// emit the intro material
-	var pkgSuffix string
-	if options.qualifyAll {
-		// TODO: remove this trailing comment, probably
-		pkgSuffix = "fuzz // rename if needed"
-	}
-	emit("package %s%s\n\n", functions[0].TypesFunc.Pkg().Name(), pkgSuffix)
+	emit("package %s\n\n", wrapperPkgName)
 	// TODO: also remove this trailing comment, probably
 	emit("// if needed, fill in imports or run 'goimports'\n")
 	emit("import (\n")

@@ -1,4 +1,4 @@
-package fuzzwrapexamplesfuzz // rename if needed
+package examplefuzz
 
 // if needed, fill in imports or run 'goimports'
 import (

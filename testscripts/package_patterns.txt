@@ -1,0 +1,319 @@
+# This tests our handling of multiple target packaages at that same time via package patterns.
+#
+# To run just this:
+#     go test -run=./patterns -end2end
+
+# No arguments creates an autofuzz_test.go in the current directory.
+fzgen
+exists autofuzz_test.go
+cmp autofuzz_test.go testdata/outer/autofuzz_test.go
+rm autofuzz_test.go
+
+# Specifying the current package explicitly also creates an autofuzz_test.go in the current directory.
+fzgen example
+exists autofuzz_test.go
+cmp autofuzz_test.go testdata/outer/autofuzz_test.go
+rm autofuzz_test.go
+
+# . means current package, so also creates an autofuzz_test.go in the current directory.
+fzgen .
+exists autofuzz_test.go
+cmp autofuzz_test.go testdata/outer/autofuzz_test.go
+rm autofuzz_test.go
+
+# None of the above should have created any of the inner output files.
+! exists inner1/autofuzz_test.go
+! exists inner2/autofuzz_test.go
+
+# Specifying multiples packages via a pattern creates autofuzz_test.go in each package's directory.
+fzgen ./...
+exists autofuzz_test.go
+exists inner1/autofuzz_test.go
+exists inner2/autofuzz_test.go
+cmp autofuzz_test.go testdata/outer/autofuzz_test.go
+cmp inner1/autofuzz_test.go testdata/inner1/autofuzz_test.go
+cmp inner2/autofuzz_test.go testdata/inner2/autofuzz_test.go
+rm autofuzz_test.go
+rm inner1/autofuzz_test.go
+rm inner2/autofuzz_test.go
+
+# Chains also work with mulitple packages.
+fzgen -chain ./...
+exists autofuzzchain_test.go
+exists inner1/autofuzzchain_test.go
+exists inner2/autofuzzchain_test.go
+cmp autofuzzchain_test.go testdata/outer/autofuzzchain_test.go
+cmp inner1/autofuzzchain_test.go testdata/inner1/autofuzzchain_test.go
+cmp inner2/autofuzzchain_test.go testdata/inner2/autofuzzchain_test.go
+rm autofuzzchain_test.go
+rm inner1/autofuzzchain_test.go
+rm inner2/autofuzzchain_test.go
+
+# We can set the name of the output file, even with multiple target packages.
+fzgen -o=my_test.go ./...
+exists my_test.go
+exists inner1/my_test.go
+exists inner2/my_test.go
+cmp my_test.go testdata/outer/autofuzz_test.go
+cmp inner1/my_test.go testdata/inner1/autofuzz_test.go
+cmp inner2/my_test.go testdata/inner2/autofuzz_test.go
+rm my_test.go
+rm inner1/my_test.go
+rm inner2/my_test.go
+
+# To help with cursory "passerby" fuzzing, or for example when targeting 
+# a dependency package that is only in the read-only module cache,
+# specifying a single target package places the result in the current working directory.
+# Because the working directory has .go files with a package name, the generated package name matches that.
+fzgen ./inner1
+exists autofuzz_test.go
+cmp autofuzz_test.go testdata/inner1_not_local/autofuzz_test.go
+rm autofuzz_test.go
+
+# For an empty directory, when placing the output in the current working directory,
+# we use a variant of the target package name for the generated package name. Verify that behavior here.
+mkdir empty
+cd empty
+fzgen example/inner1
+exists autofuzz_test.go
+cmp autofuzz_test.go ../testdata/inner1_not_local_dest_is_empty/autofuzz_test.go
+rm autofuzz_test.go
+cd ..
+rm empty
+
+# It is an error to specify a path for the output with multiple target packages.
+! fzgen -o=/tmp/my_test.go ./...
+stderr 'can only specify a file name'
+
+# It is not error to specify a path for the output with a single target packages.
+! exists empty
+mkdir empty
+cd inner1
+fzgen -o=../empty/my_test.go .
+exists ../empty/my_test.go
+! exists autofuzz_test.go
+cmp ../empty/my_test.go ../testdata/inner1_not_local_dest_is_empty/autofuzz_test.go
+rm ../empty/my_test.go
+cd ..
+
+-- go.mod --
+module example
+
+go 1.17
+
+-- outer.go --
+package outer
+
+type OuterInt int
+
+func New() OuterInt {return 0}
+
+func (o OuterInt) Foo(a OuterInt) {}
+
+-- inner1/inner1.go --
+package inner1
+
+type InnerInt1 int
+
+func New() InnerInt1 {return 0}
+
+func (i InnerInt1) Foo(a InnerInt1) {}
+
+-- inner2/inner2.go --
+package inner2
+
+type InnerInt2 int
+
+func New() InnerInt2 {return 0}
+
+func (i InnerInt2) Foo(a InnerInt2) {}
+
+-- testdata/outer/autofuzz_test.go --
+package outer
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_OuterInt_Foo(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var a OuterInt
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&a)
+
+		o := New()
+		o.Foo(a)
+	})
+}
+-- testdata/inner1/autofuzz_test.go --
+package inner1
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_InnerInt1_Foo(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var a InnerInt1
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&a)
+
+		i := New()
+		i.Foo(a)
+	})
+}
+-- testdata/inner2/autofuzz_test.go --
+package inner2
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_InnerInt2_Foo(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var a InnerInt2
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&a)
+
+		i := New()
+		i.Foo(a)
+	})
+}
+-- testdata/outer/autofuzzchain_test.go --
+package outer
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_New_Chain(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fz := fuzzer.NewFuzzer(data)
+
+		target := New()
+
+		steps := []fuzzer.Step{
+			{
+				Name: "Fuzz_OuterInt_Foo",
+				Func: func(a OuterInt) {
+					target.Foo(a)
+				},
+			},
+		}
+
+		// Execute a specific chain of steps, with the count, sequence and arguments controlled by fz.Chain
+		fz.Chain(steps)
+	})
+}
+-- testdata/inner1/autofuzzchain_test.go --
+package inner1
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_New_Chain(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fz := fuzzer.NewFuzzer(data)
+
+		target := New()
+
+		steps := []fuzzer.Step{
+			{
+				Name: "Fuzz_InnerInt1_Foo",
+				Func: func(a InnerInt1) {
+					target.Foo(a)
+				},
+			},
+		}
+
+		// Execute a specific chain of steps, with the count, sequence and arguments controlled by fz.Chain
+		fz.Chain(steps)
+	})
+}
+-- testdata/inner2/autofuzzchain_test.go --
+package inner2
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_New_Chain(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fz := fuzzer.NewFuzzer(data)
+
+		target := New()
+
+		steps := []fuzzer.Step{
+			{
+				Name: "Fuzz_InnerInt2_Foo",
+				Func: func(a InnerInt2) {
+					target.Foo(a)
+				},
+			},
+		}
+
+		// Execute a specific chain of steps, with the count, sequence and arguments controlled by fz.Chain
+		fz.Chain(steps)
+	})
+}
+-- testdata/inner1_not_local/autofuzz_test.go --
+package outer
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"example/inner1"
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_InnerInt1_Foo(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var a inner1.InnerInt1
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&a)
+
+		i := inner1.New()
+		i.Foo(a)
+	})
+}
+-- testdata/inner1_not_local_dest_is_empty/autofuzz_test.go --
+package inner1fuzz
+
+// if needed, fill in imports or run 'goimports'
+import (
+	"example/inner1"
+	"testing"
+
+	"github.com/thepudds/fzgen/fuzzer"
+)
+
+func Fuzz_InnerInt1_Foo(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var a inner1.InnerInt1
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&a)
+
+		i := inner1.New()
+		i.Foo(a)
+	})
+}

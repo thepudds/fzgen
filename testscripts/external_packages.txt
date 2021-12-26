@@ -14,9 +14,12 @@ go list -m all
 go get tailscale.com/logtail/filch@v1.18.2
 
 # Create wrappers, though force fzgen to treated filtch as a local package in the wrappers.
-fzgen -qualifyall=false tailscale.com/logtail/filch
+env FZDEBUG=forcelocal=1
+fzgen tailscale.com/logtail/filch
 exists autofuzz_test.go
 
 # Check that we don't have an unexpectly package-qualified Options type used.
 grep 'var opts Options' autofuzz_test.go
 ! grep 'var opts filch\.Options' autofuzz_test.go
+
+env FZDEBUG=forcelocal=0
