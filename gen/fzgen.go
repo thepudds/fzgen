@@ -204,9 +204,12 @@ func FzgenMain() int {
 			fail(err)
 		}
 
-		rel, err := filepath.Rel(wd, filepath.Join(wd, outFile))
-		if err != nil {
-			fail(err)
+		rel := outFile
+		if hasPath(outFile) {
+			rel, err = filepath.Rel(wd, outFile)
+			if err != nil {
+				rel = outFile
+			}
 		}
 		fmt.Println("fzgen: created", rel)
 	}
