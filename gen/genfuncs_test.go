@@ -266,8 +266,6 @@ func TestHasPath(t *testing.T) {
 		{"a/b/c.", true},
 		{"a/b/c.x", true},
 		{`c:\`, true},
-		{`c:.`, true},
-		{`c:a`, true},
 		{`c:\a\b`, true},
 		{`c:a\b`, true},
 		{`c:a\b\c`, true},
