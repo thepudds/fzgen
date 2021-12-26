@@ -1,23 +1,22 @@
-# This tests our handling of multiple target packaages at that same time via package patterns.
+# This tests our handling of multiple target packages at that same time via package patterns.
 #
 # To run just this:
 #     go test -run=./patterns -end2end
+# To update the golden files:
+#     go test -run=./patterns -end2end -update
 
 # No arguments creates an autofuzz_test.go in the current directory.
 fzgen
-exists autofuzz_test.go
 cmp autofuzz_test.go testdata/outer/autofuzz_test.go
 rm autofuzz_test.go
 
 # Specifying the current package explicitly also creates an autofuzz_test.go in the current directory.
 fzgen example
-exists autofuzz_test.go
 cmp autofuzz_test.go testdata/outer/autofuzz_test.go
 rm autofuzz_test.go
 
 # . means current package, so also creates an autofuzz_test.go in the current directory.
 fzgen .
-exists autofuzz_test.go
 cmp autofuzz_test.go testdata/outer/autofuzz_test.go
 rm autofuzz_test.go
 
@@ -25,11 +24,8 @@ rm autofuzz_test.go
 ! exists inner1/autofuzz_test.go
 ! exists inner2/autofuzz_test.go
 
-# Specifying multiples packages via a pattern creates autofuzz_test.go in each package's directory.
+# Specifying multiple packages via a pattern creates autofuzz_test.go in each package's directory.
 fzgen ./...
-exists autofuzz_test.go
-exists inner1/autofuzz_test.go
-exists inner2/autofuzz_test.go
 cmp autofuzz_test.go testdata/outer/autofuzz_test.go
 cmp inner1/autofuzz_test.go testdata/inner1/autofuzz_test.go
 cmp inner2/autofuzz_test.go testdata/inner2/autofuzz_test.go
@@ -39,9 +35,6 @@ rm inner2/autofuzz_test.go
 
 # Chains also work with mulitple packages.
 fzgen -chain ./...
-exists autofuzzchain_test.go
-exists inner1/autofuzzchain_test.go
-exists inner2/autofuzzchain_test.go
 cmp autofuzzchain_test.go testdata/outer/autofuzzchain_test.go
 cmp inner1/autofuzzchain_test.go testdata/inner1/autofuzzchain_test.go
 cmp inner2/autofuzzchain_test.go testdata/inner2/autofuzzchain_test.go
@@ -51,9 +44,6 @@ rm inner2/autofuzzchain_test.go
 
 # We can set the name of the output file, even with multiple target packages.
 fzgen -o=my_test.go ./...
-exists my_test.go
-exists inner1/my_test.go
-exists inner2/my_test.go
 cmp my_test.go testdata/outer/autofuzz_test.go
 cmp inner1/my_test.go testdata/inner1/autofuzz_test.go
 cmp inner2/my_test.go testdata/inner2/autofuzz_test.go
@@ -66,7 +56,6 @@ rm inner2/my_test.go
 # specifying a single target package places the result in the current working directory.
 # Because the working directory has .go files with a package name, the generated package name matches that.
 fzgen ./inner1
-exists autofuzz_test.go
 cmp autofuzz_test.go testdata/inner1_not_local/autofuzz_test.go
 rm autofuzz_test.go
 
@@ -75,7 +64,6 @@ rm autofuzz_test.go
 mkdir empty
 cd empty
 fzgen example/inner1
-exists autofuzz_test.go
 cmp autofuzz_test.go ../testdata/inner1_not_local_dest_is_empty/autofuzz_test.go
 rm autofuzz_test.go
 cd ..
@@ -90,7 +78,6 @@ stderr 'can only specify a file name'
 mkdir empty
 cd inner1
 fzgen -o=../empty/my_test.go .
-exists ../empty/my_test.go
 ! exists autofuzz_test.go
 cmp ../empty/my_test.go ../testdata/inner1_not_local_dest_is_empty/autofuzz_test.go
 rm ../empty/my_test.go
