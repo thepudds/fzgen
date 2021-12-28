@@ -1,3 +1,13 @@
+// Package fuzzer supports fuzzing rich signatures via the Fill method, as well as
+// the ability to automatically chain Steps together under
+// the control of the fuzzer using the Chain method.
+//
+// Package fuzzer can be used completely independently from the fzgen command
+// by manually constructing fuzzing functions, or the fzgen command can
+// be used to automatically create wrappers that use package fuzzer.
+//
+// See the project README for additional information:
+//     https://github.com/thepudds/fzgen
 package fuzzer
 
 import (
@@ -30,7 +40,7 @@ type Step struct {
 // Fuzzer is a utility object that can fill in many types
 // such as io.Reader, structs, maps, and so on, as well as supports chaining over a set of
 // functions in sequence, including connecting output to inputs
-// and re-using inputs (e.g., to help excericse APIs like a Store followed
+// and re-using inputs (e.g., to help exercise APIs like a Store followed
 // by a Load).
 // Conventially called 'fz'.
 type Fuzzer struct {
