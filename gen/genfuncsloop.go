@@ -15,11 +15,22 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+type chain struct {
+	possibleConstructors []mod.Func
+	possibleSteps        []mod.Func
+}
+
 // emitChainWrappers emits fuzzing wrappers where possible for the list of functions passed in.
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
 // type such as interface{}.
-// See package comment in main.go for more details.
 func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
+	return emitChainWrapper(pkgPattern, functions, wrapperPkgName, options)
+}
+
+// emitChainWrapper emits a fuzzing wrapper where possible for the list of functions passed in.
+// It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
+// type such as interface{}.
+func emitChainWrapper(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
 	if len(functions) == 0 {
 		return nil, fmt.Errorf("no matching functions found")
 	}
@@ -74,9 +85,9 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 
 	// use the first constructor
 	ctor := possibleConstructors[0]
-	err := emitChainPreamble(emit, ctor, options.qualifyAll)
+	err := emitChainTarget(emit, ctor, options.qualifyAll)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create chain preamble for constructor %s: %w", ctor.FuncName, err)
+		return nil, fmt.Errorf("unable to create chain target for constructor %s: %w", ctor.FuncName, err)
 	}
 
 	// put our functions we want to wrap into a deterministic order
@@ -92,7 +103,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 
 	// loop over our the functions we are wrapping, emitting a wrapper where possible.
 	for _, function := range functions {
-		err := emitChainWrapper(emit, function, ctor, options.qualifyAll)
+		err := emitChainStep(emit, function, ctor, options.qualifyAll)
 		if errors.Is(err, errSilentSkip) {
 			continue
 		}
@@ -210,7 +221,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	return out, nil
 }
 
-func emitChainPreamble(emit emitFunc, function mod.Func, qualifyAll bool) error {
+func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 	f := function.TypesFunc
 	wrappedSig, ok := f.Type().(*types.Signature)
 	if !ok {
@@ -230,7 +241,7 @@ func emitChainPreamble(emit emitFunc, function mod.Func, qualifyAll bool) error 
 	if recv == nil {
 		wrapperName = fmt.Sprintf("Fuzz_%s_Chain", f.Name())
 	} else {
-		n, err := findReceiverNamedType(recv)
+		n, err := namedType(recv)
 		if err != nil {
 			// output to stderr, but don't treat as fatal error.
 			fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: createWrapper: failed to determine receiver type: %v: %v\n", recv, err)
@@ -261,7 +272,7 @@ func emitChainPreamble(emit emitFunc, function mod.Func, qualifyAll bool) error 
 	// which we can't fill with values during fuzzing.
 	support := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
-		// we can't emit this chain preamble.
+		// we can't emit this chain target.
 		return errUnsupportedParams
 	}
 
@@ -359,11 +370,11 @@ func chainTargetReturnsErr(f *types.Func) (bool, error) {
 	return false, nil
 }
 
-// emitChainWrapper emits one fuzzing wrapper if possible.
-// It takes a list of possible constructors to insert into the wrapper body if the
+// emitChainStep emits one fuzzing step if possible.
+// It takes a list of possible constructors to insert into the step body if the
 // constructor is suitable for creating the receiver of a wrapped method.
 // qualifyAll indicates if all variables should be qualified with their package.
-func emitChainWrapper(emit emitFunc, function mod.Func, constructor mod.Func, qualifyAll bool) error {
+func emitChainStep(emit emitFunc, function mod.Func, constructor mod.Func, qualifyAll bool) error {
 	f := function.TypesFunc
 	wrappedSig, ok := f.Type().(*types.Signature)
 	if !ok {
@@ -388,7 +399,7 @@ func emitChainWrapper(emit emitFunc, function mod.Func, constructor mod.Func, qu
 		// If we restore this branch, set wrapperName = fmt.Sprintf("Fuzz_%s", f.Name())
 		return errSilentSkip
 	} else {
-		n, err := findReceiverNamedType(recv)
+		n, err := namedType(recv)
 		if err != nil {
 			// output to stderr, but don't treat as fatal error.
 			fmt.Fprintf(os.Stderr, "fzgen: warning: createWrapper: failed to determine receiver type: %v: %v\n", recv, err)

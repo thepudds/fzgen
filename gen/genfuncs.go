@@ -34,7 +34,6 @@ var (
 // emitIndependentWrappers emits fuzzing wrappers where possible for the list of functions passed in.
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
 // type such as interface{}.
-// See package comment in main.go for more details.
 func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
 	if len(functions) == 0 {
 		return nil, fmt.Errorf("no matching functions found")
@@ -148,7 +147,7 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructo
 	if recv == nil {
 		wrapperName = fmt.Sprintf("Fuzz_%s", f.Name())
 	} else {
-		n, err := findReceiverNamedType(recv)
+		n, err := namedType(recv)
 		if err != nil {
 			// output to stderr, but don't treat as fatal error.
 			fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: createWrapper: failed to determine receiver type: %v: %v\n", recv, err)
@@ -560,17 +559,16 @@ func constructorMatch(recv *types.Var, possibleCtor mod.Func) (ctorMatch, error)
 
 	ctorResult := ctorResults.At(0)
 
-	recvN, err := findReceiverNamedType(recv)
+	recvN, err := namedType(recv)
 	if err != nil {
 		// output to stderr, but don't treat as fatal error.
 		fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: constructorReplace: failed to determine receiver type when looking for constructors: %v: %v\n", recv, err)
 		return ctorMatch{}, nil
 	}
 
-	// TODO: ctorResult here is not a receiver. probably rename findReceiverNamedType to be more general.
-	ctorResultN, err := findReceiverNamedType(ctorResult)
+	ctorResultN, err := namedType(ctorResult)
 	if err != nil {
-		// findReceiverNamedType returns a types.Named if the passed in
+		// namedType returns a types.Named if the passed in
 		// types.Var is a types.Pointer or already types.Named.
 		// This candidate constructor is neither of those, which means we can't
 		// use it to give us the type we need for the receiver for this method we are trying to fuzz.
@@ -681,9 +679,9 @@ func stripPointers(t types.Type, depth int) types.Type {
 	return stripPointers(u.Elem(), depth)
 }
 
-// findReceiverNamedType returns a types.Named if the passed in
-// types.Var is a types.Pointer or already types.Named.
-func findReceiverNamedType(recv *types.Var) (*types.Named, error) {
+// namedType returns a types.Named if the passed in
+// types.Var is a types.Pointer or a types.Named.
+func namedType(recv *types.Var) (*types.Named, error) {
 	reportErr := func() (*types.Named, error) {
 		return nil, fmt.Errorf("expected pointer or named type: %+v", recv.Type())
 	}
