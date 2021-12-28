@@ -45,14 +45,14 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	// TODO: for now, require an exact match on constructor. Could relax this (e.g., perhaps use first that has return type
 	// matching >1 method that matched the func pattern, or shortest match, or ...)
 	if len(possibleConstructors) == 0 {
-		return nil, fmt.Errorf("constructor pattern does not match any constructors")
+		return nil, errNoConstructorMatch
 	}
 	if len(possibleConstructors) > 1 {
 		var s []string
 		for _, c := range possibleConstructors {
 			s = append(s, c.FuncName)
 		}
-		return nil, fmt.Errorf("constructor pattern must match exactly one constructor. matches: " + strings.Join(s, ", "))
+		return nil, fmt.Errorf("%w %s", errTooManyConstructorsMatch, strings.Join(s, ", "))
 	}
 
 	// prepare the output
@@ -75,12 +75,8 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	// use the first constructor
 	ctor := possibleConstructors[0]
 	err := emitChainPreamble(emit, ctor, options.qualifyAll)
-	if errors.Is(err, errSilentSkip) {
-		// TODO: more specific error?
-		return nil, errors.New("failed to create chain preamble for constructor: " + ctor.FuncName)
-	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create chain preamble for constructor %s: %w", ctor.FuncName, err)
 	}
 
 	// put our functions we want to wrap into a deterministic order
@@ -265,8 +261,8 @@ func emitChainPreamble(emit emitFunc, function mod.Func, qualifyAll bool) error 
 	// which we can't fill with values during fuzzing.
 	support := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
-		// skip this wrapper. disallowedParams emitted a comment with more details.
-		return errSilentSkip
+		// we can't emit this chain preamble.
+		return errUnsupportedParams
 	}
 
 	// Start emitting the wrapper function!
