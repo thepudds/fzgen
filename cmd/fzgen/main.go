@@ -1,3 +1,7 @@
+// Command fzgen automatically generates fuzz functions.
+//
+// See the project README for additional information:
+//     https://github.com/thepudds/fzgen
 package main
 
 import (

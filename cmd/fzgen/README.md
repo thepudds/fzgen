@@ -1,3 +1,3 @@
 ## cmd/fzgen
 
-See the project [README](https://github.com/thepudds/fzgo/) for more details.
+See the project [README](https://github.com/thepudds/fzgen/) for more details.
