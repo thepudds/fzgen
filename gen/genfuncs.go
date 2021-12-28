@@ -24,7 +24,12 @@ type wrapperOptions struct {
 
 type emitFunc func(format string, args ...interface{})
 
-var errSilentSkip = errors.New("silently skipping wrapper generation")
+var (
+	errSilentSkip               = errors.New("silently skipping wrapper generation")
+	errNoConstructorMatch       = errors.New("no matching constructor")
+	errTooManyConstructorsMatch = errors.New("too many matching constructors")
+	errUnsupportedParams        = errors.New("unsupported parameters")
+)
 
 // emitIndependentWrappers emits fuzzing wrappers where possible for the list of functions passed in.
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter

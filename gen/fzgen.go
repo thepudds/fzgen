@@ -6,6 +6,7 @@
 package fzgen
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -194,6 +195,26 @@ func FzgenMain() int {
 			out, err = emitIndependentWrappers(pkgs[i].pkgPath, pkgs[i].functions, wrapperPkgName, wrapperOpts)
 		} else {
 			out, err = emitChainWrappers(pkgs[i].pkgPath, pkgs[i].functions, wrapperPkgName, wrapperOpts)
+
+			// Handle certain common errors gracefully, including skipping & continuing if multiple target packages.
+			msgDest, msgPrefix := os.Stderr, "fzgen:"
+			if len(pkgs) > 1 {
+				msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
+			}
+			switch {
+			case errors.Is(err, errUnsupportedParams):
+				fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
+				if len(pkgs) > 1 {
+					continue
+				}
+				return 1
+			case errors.Is(err, errNoConstructorMatch), errors.Is(err, errTooManyConstructorsMatch):
+				fmt.Fprintf(msgDest, "%s %v for -ctor pattern %q\n", msgPrefix, err, *constructorPatternFlag)
+				if len(pkgs) > 1 {
+					continue
+				}
+				return 1
+			}
 		}
 		if err != nil {
 			fail(err)
@@ -244,6 +265,14 @@ func outDirPkgName(outFile string) string {
 		fail(err)
 	}
 
+	isMod, err := isInModule(outDir)
+	if err != nil {
+		fail(fmt.Errorf("failed when checking if directory %q is a module: %v", outDir, err))
+	}
+	if !isMod {
+		fail(fmt.Errorf("output directory %q is not a module", outDir))
+	}
+
 	// Determine our current package name using go list.
 	pkgNames, err := goList(outDir, "-e", "-f", "{{.Name}}", ".")
 	if err != nil {
@@ -256,8 +285,7 @@ func outDirPkgName(outFile string) string {
 	case 1:
 		return pkgNames[0]
 	default:
-		fail(fmt.Errorf("found more than single result for a package name for output file location %q. found %d packages",
-			outFile, len(pkgNames)))
+		fail(errors.New("unexpected"))
 	}
 	return ""
 }

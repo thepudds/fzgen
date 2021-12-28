@@ -147,13 +147,15 @@ func goListDir(pkgPath string, env []string) (string, error) {
 // goList returns a list of packages for a package pattern.
 // There is probably a more refined way to do this, but it might do 'go list' anyway.
 func goList(dir string, args ...string) ([]string, error) {
+	if dir == "" {
+		dir = "."
+	}
+
 	cmdArgs := append([]string{"list"}, args...)
 	cmd := exec.Command("go", cmdArgs...)
 	cmd.Env = os.Environ()
 	cmd.Stderr = os.Stderr
-	if dir != "" {
-		cmd.Dir = dir
-	}
+	cmd.Dir = dir
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -171,6 +173,25 @@ func goList(dir string, args ...string) ([]string, error) {
 		result = append(result, line)
 	}
 	return result, nil
+}
+
+// isInModule reports if dir appears to be within a module with a 'go.mod'.
+func isInModule(dir string) (bool, error) {
+	cmd := exec.Command("go", "env", "GOMOD")
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	s := strings.TrimSpace(string(out))
+	if s == "" || s == os.DevNull {
+		// Go 1.11 reports empty string for no 'go.mod'.
+		// Go 1.12+ report os.DevNull for no 'go.mod'
+		return false, nil
+	}
+	return true, nil
 }
 
 // TODO: would be good to find some canonical documentation or example of this.

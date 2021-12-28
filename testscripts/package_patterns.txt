@@ -69,11 +69,23 @@ rm autofuzz_test.go
 cd ..
 rm empty
 
-# It is an error to specify a path for the output with multiple target packages.
+# Specifying a destination outside of a module is an error.
+! fzgen -o=../my_test.go .
+stderr 'is not a module'
+
+# Not matching any constructors with -chain is an error for a single target package.
+! fzgen -chain -ctor=NoMatch
+stderr 'no matching constructor'
+
+# Not matching a constructors with -chain skips if there are multiple target packages.
+fzgen -chain -ctor=NoMatch ./...
+stdout 'skipping .*: no matching constructor'
+
+# Specifying a path for the output with multiple target packages is an error.
 ! fzgen -o=/tmp/my_test.go ./...
 stderr 'can only specify a file name'
 
-# It is not error to specify a path for the output with a single target packages.
+# Specifying a path for the output with a single target packages is not an error.
 ! exists empty
 mkdir empty
 cd inner1
