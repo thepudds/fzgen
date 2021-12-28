@@ -210,7 +210,7 @@ func isExportedFunc(f *types.Func) bool {
 		return true
 	}
 
-	n, err := findReceiverNamedType(recv)
+	n, err := namedType(recv)
 	if err != nil {
 		// don't treat as fatal error.
 		fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: failed to determine if exported for receiver %v for func %v: %v\n",
