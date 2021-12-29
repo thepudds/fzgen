@@ -28,9 +28,9 @@ type MyUUID2 struct{}
 // This constructor returns a pointer, in constrast to NewFromBytes above.
 func NewMyUUID2() *MyUUID2 { return &MyUUID2{} }
 
-func (nu MyUUID2) Foo() ([]byte, error)
+func (nu MyUUID2) Foo() ([]byte, error) { return nil, nil }
 
-func (nu *MyUUID2) Bar(data []byte) error
+func (nu *MyUUID2) Bar(data []byte) error { return nil }
 
 // This is not a constructor because string is not a named type.
 func NewBaz() string { return "" }
