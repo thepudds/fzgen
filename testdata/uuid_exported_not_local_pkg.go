@@ -66,3 +66,29 @@ func Fuzz_NewFromBytes_Chain(f *testing.F) {
 		}
 	})
 }
+
+func Fuzz_NewMyUUID2_Chain(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fz := fuzzer.NewFuzzer(data)
+
+		target := uuid.NewMyUUID2()
+
+		steps := []fuzzer.Step{
+			{
+				Name: "Fuzz_MyUUID2_Bar",
+				Func: func(d1 []byte) {
+					target.Bar(d1)
+				},
+			},
+			{
+				Name: "Fuzz_MyUUID2_Foo",
+				Func: func() ([]byte, error) {
+					return target.Foo()
+				},
+			},
+		}
+
+		// Execute a specific chain of steps, with the count, sequence and arguments controlled by fz.Chain
+		fz.Chain(steps, fuzzer.ChainParallel)
+	})
+}

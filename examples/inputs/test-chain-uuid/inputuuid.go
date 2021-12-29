@@ -1,5 +1,4 @@
-// This is rougly modeled on a few examples from github.com/google/uuid.UUID.
-// This is used for some basic tests.
+// Package uuid is a simplified example for testing, roughly modeled on github.com/google/uuid.UUID.
 package uuid
 
 type MyUUID struct{}
@@ -22,3 +21,16 @@ func (uuid *MyUUID) UnmarshalBinary(data []byte) error { return nil }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler.
 func (uuid MyUUID) MarshalBinary() ([]byte, error) { return nil, nil }
+
+// MyUUID2 is a second type that should also be picked up via 'fzgen -chain'.
+type MyUUID2 struct{}
+
+// This constructor returns a pointer, in constrast to NewFromBytes above.
+func NewMyUUID2() *MyUUID2 { return &MyUUID2{} }
+
+func (nu MyUUID2) Foo() ([]byte, error)
+
+func (nu *MyUUID2) Bar(data []byte) error
+
+// This is not a constructor because string is not a named type.
+func NewBaz() string { return "" }

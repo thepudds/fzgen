@@ -129,22 +129,9 @@ This will output a snippet of valid Go code that represents the reproducer:
 
 [...]
     --- FAIL: Fuzz_NewMySafeMap (0.01s)
-        testing.go:1282: race detected during execution of test
 ```
 
-Note that just running a regular test under the race detector might not catch this bug, including because the race detector [only finds data races that happen at runtime](https://go.dev/blog/race-detector), which means a diversity of code paths and input data is imporant for the race detector to do its job.
-fz.Chain helps supply those code paths and data -- in this case, usually hundreds of thousands of coverage-guided variations before hitting the data race.
-
-For this particular [bug](https://github.com/thepudds/fzgen/blob/master/examples/inputs/race/race.go#L34-L36) to be observable by the race detector, it requires:
-
-  1. A Store must complete, then be followed by two Loads, and all three must use the same key.
-  2. The Store must have certain payload data (`Answer: 42`).
-  3. The two Loads must happen concurrently.
-  4. Prior to the two Loads, no other Store can update the key to have a non-matching payload.
-
-Here, the `42` seen in the reproducer must be `42`. On the other hand, the exact value of `152,152,152,...` in the key doesn't matter, but what does matter is that the same key value must be used across this sequence of three calls to trigger the bug. 
-
-fz.Chain has logic to sometimes re-use input arguments of the same type across different calls (e.g., to make it easier to have a meaningful `Get(key)` following a `Put(key)`), as well logic to feed outputs of one step as the input to a subsequent step, which is helpful in other cases.
+#### What just happened?
 
 Rewinding slightly, if you look at the code you just automatically generated in [autofuzzchain_test.go](https://github.com/thepudds/fzgen/blob/main/examples/outputs/race/autofuzzchain_test.go), you can see there are a set of possible "steps" listed that each invoke the target, but the most important line there is:
 
@@ -155,16 +142,34 @@ Rewinding slightly, if you look at the code you just automatically generated in 
 
 In other words, at execution time, fz.Chain takes over and guides the underlying fuzzing engine towards interesting calling patterns & arguments, while simultaneously exploring what runs in parallel vs. sequentially, the timing of parallel calls, and so on.
 
+For this bug, it usually takes hundreds of thousands of coverage-guided variations of call patterns and inputs before hitting this data race. The reproducer emitted was the first variation to trigger the race detector.
+
+#### Would the race detector find this with a trivial test?
+
+Just running a regular test under the race detector might not catch this bug, including because the race detector [only finds data races that happen at execution time](https://go.dev/blog/race-detector), which means a diversity of code paths and input data are imporant for the race detector to do its job.
+fz.Chain helps supply those code paths and data.
+
+For this [example bug](https://github.com/thepudds/fzgen/blob/main/examples/inputs/race/race.go#L34-L36) to be observable by the race detector, it requires:
+
+  1. A Store must complete, then be followed by two Loads, and all three must use the same key.
+  2. The Store must have certain payload data (`Answer: 42`).
+  3. The two Loads must happen concurrently.
+  4. Prior to the two Loads, no other Store can update the key to have a non-matching payload.
+
+Here, the `42` seen in the reproducer must be `42`. On the other hand, the exact value of `152,152,152,...` in the key doesn't matter, but what does matter is that the same key value must be used across this sequence of three calls to trigger the bug. 
+
+fz.Chain has logic to sometimes re-use input arguments of the same type across different calls (e.g., to make it easier to have a meaningful `Get(key)` following a `Put(key, ...)`), as well logic to feed outputs of one step as the input to a subsequent step, which is helpful in other cases.
+
 ## Example: Finding a Real Concurrency Bug in Real Code
 
-The prior example was a small but challenging example that takes a few minutes of fuzzing to find, but you can see an example of a deadlock found in real code [here](https://github.com/thepudds/fzgen/blob/master/examples/outputs/race-xsync-map-repro/standalone_repro1_test.go) from the xsync.Map from github.com/puzpuzpuz/xsync.
+The prior example was a small but challenging example that takes a few minutes of fuzzing to find, but you can see an example of a deadlock found in real code [here](https://github.com/thepudds/fzgen/blob/main/examples/outputs/race-xsync-map-repro/standalone_repro1_test.go) from the xsync.Map from github.com/puzpuzpuz/xsync.
 
 In this case, it usually takes fz.Chain several million coverage-guided variations over a few hours of executing the generated 
- [autogenchain_test.go](https://github.com/thepudds/fzgen/blob/master/examples/outputs/race-xsync-map/autofuzzchain_test.go) before it finds the deadlock.
+ [autogenchain_test.go](https://github.com/thepudds/fzgen/blob/main/examples/outputs/race-xsync-map/autofuzzchain_test.go) before it finds the deadlock.
 
 Interestingly, the deadlock then typically only reproduces about 1 out of 1,000 attempts for a particular discovered problematic calling pattern and arguments.
 
-Fortunately, once a problem is reported, we can paste the output of `FZDEBUG=repro=1` into a [standalone_repro_test.go](https://github.com/thepudds/fzgen/blob/master/examples/outputs/race-xsync-map-repro/standalone_repro1_test.go) file and use the handy `-count` argument in a normal `go test -count=10000` invocation, and now we can reproduce the deadlock cleanly on demand. At that point, the reproducer is completely standalone and does not rely on fzgen any longer.
+Fortunately, once a problem is reported, we can paste the output of `FZDEBUG=repro=1` into a [standalone_repro_test.go](https://github.com/thepudds/fzgen/blob/main/examples/outputs/race-xsync-map-repro/standalone_repro1_test.go) file and use the handy `-count` argument in a normal `go test -count=10000` invocation, and now we can reproduce the deadlock cleanly on demand. At that point, the reproducer is completely standalone and does not rely on fzgen any longer.
 
 ## fzgen status
 

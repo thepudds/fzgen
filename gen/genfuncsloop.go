@@ -9,34 +9,17 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/thepudds/fzgen/gen/internal/mod"
 	"golang.org/x/tools/imports"
 )
 
-type chain struct {
-	possibleConstructors []mod.Func
-	possibleSteps        []mod.Func
-}
-
-// emitChainWrappers emits fuzzing wrappers where possible for the list of functions passed in.
+// emitChainWrappers emits a set of fuzzing wrappers where possible for the list of functions passed in.
+// Each wrapper consists of a target from a constructor and a set of steps that include invoking methods on the target.
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
 // type such as interface{}.
 func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
-	return emitChainWrapper(pkgPattern, functions, wrapperPkgName, options)
-}
-
-// emitChainWrapper emits a fuzzing wrapper where possible for the list of functions passed in.
-// It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
-// type such as interface{}.
-func emitChainWrapper(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
-	if len(functions) == 0 {
-		return nil, fmt.Errorf("no matching functions found")
-	}
-
-	// start by hunting for possible constructors in the same package if requested.
-	// TODO: consider extracting this to helper func
+	// Start by hunting for possible constructors in the same package if requested.
 	var possibleConstructors []mod.Func
 	if options.insertConstructors {
 		// We default to the pattern ^New, but allow user-specified patterns.
@@ -46,34 +29,72 @@ func emitChainWrapper(pkgPattern string, functions []mod.Func, wrapperPkgName st
 		// TODO: consider related tweak to error reporting in FindFunc?
 		possibleConstructors, _ = findFunc(pkgPattern, options.constructorPattern, nil,
 			flagExcludeFuzzPrefix|flagAllowMultiFuzz|flagRequireExported)
-		// put possibleConstructors into a semi-deterministic order.
-		// TODO: for now, we'll prefer simpler constructors as approximated by length (so 'New' before 'NewSomething').
-		sort.Slice(possibleConstructors, func(i, j int) bool {
-			return len(possibleConstructors[i].FuncName) < len(possibleConstructors[j].FuncName)
-		})
 	}
 
-	// TODO: for now, require an exact match on constructor. Could relax this (e.g., perhaps use first that has return type
-	// matching >1 method that matched the func pattern, or shortest match, or ...)
 	if len(possibleConstructors) == 0 {
-		return nil, errNoConstructorMatch
-	}
-	if len(possibleConstructors) > 1 {
-		var s []string
-		for _, c := range possibleConstructors {
-			s = append(s, c.FuncName)
-		}
-		return nil, fmt.Errorf("%w %s", errTooManyConstructorsMatch, strings.Join(s, ", "))
+		return nil, errNoConstructorsMatch
 	}
 
-	// prepare the output
+	// Build a map from the receiver type to a set of possible constructors
+	// and possible steps with the same receiver type.
+	type chain struct {
+		recvType     string
+		constructors []mod.Func
+		steps        []mod.Func
+	}
+	recvTypes := make(map[string]*chain)
+	for _, function := range functions {
+		// recvN will be the named type if the receiver is a pointer receiver.
+		recvN := receiver(function.TypesFunc)
+		if recvN == nil {
+			continue
+		}
+		recvType := types.TypeString(recvN, nil)
+		c := recvTypes[recvType]
+		if c == nil {
+			c = &chain{recvType: recvType}
+			recvTypes[recvType] = c
+		}
+		c.steps = append(c.steps, function)
+	}
+
+	if len(recvTypes) == 0 {
+		return nil, errNoMethodsMatch
+	}
+
+	for _, constructor := range possibleConstructors {
+		// ctorResultN will be the named type if the returned type is a pointer to a named type.
+		ctorResultN, _ := constructorResult(constructor.TypesFunc)
+		if ctorResultN == nil {
+			// Not a named return result, so can't be a constructor.
+			continue
+		}
+		ctorType := types.TypeString(ctorResultN, nil)
+		c := recvTypes[ctorType]
+		if c == nil {
+			// No methods found in loop above for this named type, so nothing to do with this possible constructor.
+			continue
+		}
+		c.constructors = append(c.constructors, constructor)
+	}
+
+	// Put our chains in a deterministic order.
+	var chains []*chain
+	for _, v := range recvTypes {
+		chains = append(chains, v)
+	}
+	sort.Slice(chains, func(i, j int) bool {
+		return chains[i].recvType < chains[j].recvType
+	})
+
+	// Prepare the output
 	buf := new(bytes.Buffer)
 	var w io.Writer = buf
 	emit := func(format string, args ...interface{}) {
 		fmt.Fprintf(w, format, args...)
 	}
 
-	// emit the intro material
+	// Emit the intro material
 	emit("package %s\n\n", wrapperPkgName)
 	// TODO: also remove this trailing comment, probably
 	emit("// if needed, fill in imports or run 'goimports'\n")
@@ -83,11 +104,75 @@ func emitChainWrapper(pkgPattern string, functions []mod.Func, wrapperPkgName st
 	emit("\t\"github.com/thepudds/fzgen/fuzzer\"\n")
 	emit(")\n\n")
 
+	// Loop over our chains and emit fuzzing wrappers for each one.
+	// We only return an error if all fail.
+	var firstErr error
+	var success bool
+	for _, c := range chains {
+		if len(c.constructors) == 0 {
+			// No matching constructor.
+			// TODO: consider creating new object directly when there is no constructor
+			if firstErr == nil {
+				firstErr = errNoConstructorsMatch
+			}
+			continue
+		}
+		err := emitChainWrapper(emit, c.steps, c.constructors, options)
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+		if err == nil {
+			success = true
+		}
+	}
+	if !success {
+		return nil, firstErr
+	}
+
+	// Fix up any needed imports.
+	// TODO: perf: this seems slower than expected. Check what style of path should be used for filename?
+	// imports.Process has this comment:
+	//   Note that filename's directory influences which imports can be chosen,
+	//   so it is important that filename be accurate.
+	// TODO: move this to fzgen.go
+	filename, err := filepath.Abs(("autofuzz_test.go"))
+	warn := func(err error) {
+		fmt.Fprintln(os.Stderr, "fzgen: warning: continuing after failing to automatically adjust imports:", err)
+	}
+	if err != nil {
+		warn(err)
+		return buf.Bytes(), nil
+	}
+	out, err := imports.Process(filename, buf.Bytes(), nil)
+	if err != nil {
+		warn(err)
+		return buf.Bytes(), nil
+	}
+	return out, nil
+}
+
+// emitChainWrapper emits one fuzzing wrapper where possible for the list of functions passed in.
+// It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
+// type such as interface{}.
+func emitChainWrapper(emit emitFunc, functions []mod.Func, possibleConstructors []mod.Func, options wrapperOptions) error {
+	if len(functions) == 0 {
+		return errors.New("emitChainWrapper: zero functions")
+	}
+	if len(possibleConstructors) == 0 {
+		return errors.New("emitChainWrapper: zero possible constructors")
+	}
+
+	// put possibleConstructors into a semi-deterministic order.
+	// TODO: for now, we'll prefer simpler constructors as approximated by length (so 'New' before 'NewSomething').
+	sort.Slice(possibleConstructors, func(i, j int) bool {
+		return len(possibleConstructors[i].FuncName) < len(possibleConstructors[j].FuncName)
+	})
+
 	// use the first constructor
 	ctor := possibleConstructors[0]
 	err := emitChainTarget(emit, ctor, options.qualifyAll)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create chain target for constructor %s: %w", ctor.FuncName, err)
+		return fmt.Errorf("unable to create chain target for constructor %s: %w", ctor.FuncName, err)
 	}
 
 	// put our functions we want to wrap into a deterministic order
@@ -108,7 +193,7 @@ func emitChainWrapper(pkgPattern string, functions []mod.Func, wrapperPkgName st
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("error processing %s: %v", function.FuncName, err)
+			return fmt.Errorf("error processing %s: %v", function.FuncName, err)
 		}
 	}
 	// close out steps slice
@@ -200,25 +285,7 @@ func emitChainWrapper(pkgPattern string, functions []mod.Func, wrapperPkgName st
 	// close out test func
 	emit("}\n\n")
 
-	// fix up any needed imports.
-	// TODO: perf: this seems slower than expected. Check what style of path should be used for filename?
-	// imports.Process has this comment:
-	//   Note that filename's directory influences which imports can be chosen,
-	//   so it is important that filename be accurate.
-	filename, err := filepath.Abs(("autofuzz_test.go"))
-	warn := func(err error) {
-		fmt.Fprintln(os.Stderr, "fzgen: warning: continuing after failing to automatically adjust imports:", err)
-	}
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	out, err := imports.Process(filename, buf.Bytes(), nil)
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	return out, nil
+	return nil
 }
 
 func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
@@ -244,7 +311,7 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 		n, err := namedType(recv)
 		if err != nil {
 			// output to stderr, but don't treat as fatal error.
-			fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: createWrapper: failed to determine receiver type: %v: %v\n", recv, err)
+			fmt.Fprintf(os.Stderr, "fzgen: warning: createWrapper: failed to determine receiver type: %v: %v\n", recv, err)
 			return nil
 		}
 		recvNamedTypeLocalName := types.TypeString(n.Obj().Type(), localQualifier)
@@ -270,7 +337,7 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support := checkParamSupport(emit, inputParams, wrapperName)
+	support, _ := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
 		// we can't emit this chain target.
 		return errUnsupportedParams
@@ -324,9 +391,9 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 
 	// Emit the call to the wrapped function, which is the constructor whose result
 	// we will reuse in our steps.
-	returnsErr, err := chainTargetReturnsErr(f)
-	if err != nil {
-		return err
+	ctorResultN, returnsErr := constructorResult(f)
+	if ctorResultN == nil {
+		return fmt.Errorf("chain target constructor %s does not return named type (%+v)", f.Name(), f)
 	}
 	if returnsErr {
 		// TODO: instead of "target", would be nicer to reuse receiver variable name here (e.g., from first sample method).
@@ -343,31 +410,6 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 	}
 	emit("\n")
 	return nil
-}
-
-// chainTargetReturnsErr checks that we can handle this constructor as our target for our chain,
-// and also reports if the target constuctor returns an error as the second of two return values.
-func chainTargetReturnsErr(f *types.Func) (bool, error) {
-	ctorSig, ok := f.Type().(*types.Signature)
-	if !ok {
-		return false, fmt.Errorf("constructor %s is not *types.Signature (%+v)", f.Name(), f)
-	}
-
-	ctorResults := ctorSig.Results()
-	if ctorResults.Len() > 2 || ctorResults.Len() == 0 {
-		return false, fmt.Errorf("constructor %s must return 1 value, or 2 values with second value of type error", f.Name())
-	}
-	if ctorResults.Len() == 2 {
-		// handle case of error type as second return value
-		secondResult := ctorResults.At(1)
-		_, ok = secondResult.Type().Underlying().(*types.Interface)
-		if ok && secondResult.Type().String() == "error" {
-			return true, nil
-		} else {
-			return false, fmt.Errorf("constructor %s with 2 return values does not have second of type error", f.Name())
-		}
-	}
-	return false, nil
 }
 
 // emitChainStep emits one fuzzing step if possible.
@@ -439,7 +481,7 @@ func emitChainStep(emit emitFunc, function mod.Func, constructor mod.Func, quali
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support := checkParamSupport(emit, inputParams, wrapperName)
+	support, _ := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
 		// skip this wrapper. disallowedParams emitted a comment with more details.
 		return errSilentSkip
