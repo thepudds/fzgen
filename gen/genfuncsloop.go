@@ -69,6 +69,12 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 			// Not a named return result, so can't be a constructor.
 			continue
 		}
+		recv := receiver(constructor.TypesFunc)
+		if recv != nil {
+			// This function has a receiver, so not a constructor
+			continue
+		}
+
 		ctorType := types.TypeString(ctorResultN, nil)
 		c := recvTypes[ctorType]
 		if c == nil {
