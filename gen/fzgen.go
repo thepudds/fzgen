@@ -21,7 +21,7 @@ import (
 )
 
 // one way to test this is against the stdlib (here, this just tests that fzgen generates and the result compiles successfully):
-//   for x in $(go list std | egrep -v 'internal|runtime|unsafe|vendor|image/color/palette'); do start=$(pwd); echo $x; mkdir -p $x; cd $x ; fzgen $x && gotip test . || echo "--- FAILED $x ---"; cd $start; done &> out.txt
+//   for x in $(go list std | egrep -v 'internal|runtime|unsafe|vendor|image/color/palette'); do echo $x; mkdir -p $x; cd $x ; fzgen $x && gotip test -c || echo "--- FAILED $x ---"; cd - >/dev/null; done &> out.txt
 // current stats:
 //   grep -r '^func Fuzz' | wc -l
 //   2775
