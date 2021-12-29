@@ -23,3 +23,8 @@ grep 'var opts Options' autofuzz_test.go
 ! grep 'var opts filch\.Options' autofuzz_test.go
 
 env FZDEBUG=forcelocal=0
+
+# Verify we properly detect no matching constructor when there are methods.
+go get tailscale.com/client/tailscale@v1.18.2
+! fzgen -chain -ctor=. tailscale.com/client/tailscale
+stderr 'no matching constructor'

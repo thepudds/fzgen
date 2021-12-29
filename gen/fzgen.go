@@ -202,13 +202,13 @@ func FzgenMain() int {
 				msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
 			}
 			switch {
-			case errors.Is(err, errUnsupportedParams):
+			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch):
 				fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
 				if len(pkgs) > 1 {
 					continue
 				}
 				return 1
-			case errors.Is(err, errNoConstructorMatch), errors.Is(err, errTooManyConstructorsMatch):
+			case errors.Is(err, errNoConstructorsMatch):
 				fmt.Fprintf(msgDest, "%s %v for -ctor pattern %q\n", msgPrefix, err, *constructorPatternFlag)
 				if len(pkgs) > 1 {
 					continue

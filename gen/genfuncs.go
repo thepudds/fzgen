@@ -25,10 +25,10 @@ type wrapperOptions struct {
 type emitFunc func(format string, args ...interface{})
 
 var (
-	errSilentSkip               = errors.New("silently skipping wrapper generation")
-	errNoConstructorMatch       = errors.New("no matching constructor")
-	errTooManyConstructorsMatch = errors.New("too many matching constructors")
-	errUnsupportedParams        = errors.New("unsupported parameters")
+	errSilentSkip          = errors.New("silently skipping wrapper generation")
+	errNoConstructorsMatch = errors.New("no matching constructor")
+	errNoMethodsMatch      = errors.New("no methods found")
+	errUnsupportedParams   = errors.New("unsupported parameters")
 )
 
 // emitIndependentWrappers emits fuzzing wrappers where possible for the list of functions passed in.
@@ -210,7 +210,7 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructo
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support := checkParamSupport(emit, inputParams, wrapperName)
+	support, _ := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
 		// skip this wrapper. disallowedParams emitted a comment with more details.
 		return errSilentSkip
@@ -231,7 +231,6 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructo
 		for i, p := range paramReprs {
 			// want: foo string, bar int
 			if i > 0 {
-				// need a comma if something has already been emitted
 				emit(", ")
 			}
 			emit("%s %s", p.paramName, p.typ)
@@ -261,7 +260,6 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructo
 		emit("\t\tfz.Fill(")
 		for i, p := range paramReprs {
 			if i > 0 {
-				// need a comma if something has already been emitted
 				emit(", ")
 			}
 			emit("&%s", p.paramName)
@@ -404,13 +402,13 @@ const (
 // checkParamSupport reports the level of support across the input parameters.
 // It stops checking if it finds a param that is noSupport.
 // TODO: this is currently focuses on excluding the most common problems, and defaults to trying nativeSupport (which might cause cmd/go to complain).
-func checkParamSupport(emit emitFunc, allWrapperParams []*types.Var, wrapperName string) paramSupport {
+func checkParamSupport(emit emitFunc, allWrapperParams []*types.Var, wrapperName string) (paramSupport, string) {
 	res := unknown
 	if len(allWrapperParams) == 0 {
 		// An easy case that is handled by cmd/go is no params at all.
 		// This doesn't currently happen with independent wrappers, but does happen with chain wrappers
 		// that are targeting a method with no params.
-		return nativeSupport
+		return nativeSupport, ""
 	}
 	min := func(a, b paramSupport) paramSupport {
 		// TODO: use generics in 1.18 ;-)
@@ -423,7 +421,6 @@ func checkParamSupport(emit emitFunc, allWrapperParams []*types.Var, wrapperName
 		// basic checking for interfaces, funcs, or pointers or slices of interfaces or funcs.
 		// TODO: should do a more comprehensive check, perhaps recursive, including handling cycles, but keep it simple for now.
 		// TODO: alt, invert this to check for things we believe cmd/go supports and disallow things we know we can't fill?
-		// TODO: I think cmd/go does support not pointers like *int or ***int? And not yet maps or slices outside of []byte?
 		t := v.Type()
 		t = stripPointers(t, 0)
 		if t != v.Type() {
@@ -470,21 +467,19 @@ func checkParamSupport(emit emitFunc, allWrapperParams []*types.Var, wrapperName
 		case *types.Interface:
 			if !fuzzer.SupportedInterfaces[t.String()] {
 				emit("// skipping %s because parameters include unsupported interface: %v\n\n", wrapperName, v.Type())
-				res = min(noSupport, res)
-				return res
+				return noSupport, v.Type().String()
 			}
 			res = min(fillRequired, res)
 		case *types.Signature, *types.Chan:
 			emit("// skipping %s because parameters include unsupported func or chan: %v\n\n", wrapperName, v.Type())
-			res = min(noSupport, res)
-			return res
+			return noSupport, v.Type().String()
 		}
 
 		// If we didn't easily find a problematic type above, we'll guess that cmd/go supports it,
 		// and let cmd/go complain if it needs to for more complex cases not handled above.
 		res = min(nativeSupport, res)
 	}
-	return res
+	return res, ""
 }
 
 // ctorMatch holds the signature of a suitable constructor if we found one.
@@ -539,40 +534,15 @@ func constructorMatch(recv *types.Var, possibleCtor mod.Func) (ctorMatch, error)
 			possibleCtor, possibleCtor.TypesFunc)
 	}
 
-	// TODO: we used to disallow ctors here with ctorSig.Params().Len() == 0, but probably OK to allow?
-
-	ctorResults := ctorSig.Results()
-	if ctorResults.Len() > 2 || ctorResults.Len() == 0 {
+	ctorResultN, secondResultIsErr := constructorResult(possibleCtor.TypesFunc)
+	if ctorResultN == nil {
 		return ctorMatch{}, nil
 	}
-	secondResultIsErr := false
-	if ctorResults.Len() == 2 {
-		// We allow error type as second return value
-		secondResult := ctorResults.At(1)
-		_, ok = secondResult.Type().Underlying().(*types.Interface)
-		if ok && secondResult.Type().String() == "error" {
-			secondResultIsErr = true
-		} else {
-			return ctorMatch{}, nil
-		}
-	}
-
-	ctorResult := ctorResults.At(0)
 
 	recvN, err := namedType(recv)
 	if err != nil {
 		// output to stderr, but don't treat as fatal error.
 		fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: constructorReplace: failed to determine receiver type when looking for constructors: %v: %v\n", recv, err)
-		return ctorMatch{}, nil
-	}
-
-	ctorResultN, err := namedType(ctorResult)
-	if err != nil {
-		// namedType returns a types.Named if the passed in
-		// types.Var is a types.Pointer or already types.Named.
-		// This candidate constructor is neither of those, which means we can't
-		// use it to give us the type we need for the receiver for this method we are trying to fuzz.
-		// This is not an error for matching purposes. It just means it didn't match.
 		return ctorMatch{}, nil
 	}
 
@@ -679,8 +649,8 @@ func stripPointers(t types.Type, depth int) types.Type {
 	return stripPointers(u.Elem(), depth)
 }
 
-// namedType returns a types.Named if the passed in
-// types.Var is a types.Pointer or a types.Named.
+// namedType returns a *types.Named if the passed in
+// *types.Var is a *types.Pointer or a *types.Named.
 func namedType(recv *types.Var) (*types.Named, error) {
 	reportErr := func() (*types.Named, error) {
 		return nil, fmt.Errorf("expected pointer or named type: %+v", recv.Type())
@@ -699,4 +669,67 @@ func namedType(recv *types.Var) (*types.Named, error) {
 		return t, nil
 	}
 	return reportErr()
+}
+
+// receiver expects a *types.Func that is type *types.Signature,
+// and returns the *types.Named for the receiver if
+// f has one, and nil otherwise. If the receiver is a pointer
+// to a named type, this returns the named type rather than the pointer.
+func receiver(f *types.Func) *types.Named {
+	sig, ok := f.Type().(*types.Signature)
+	if !ok {
+		return nil
+	}
+	// Get our receiver, which might be nil if we don't have a receiver
+	recv := sig.Recv()
+	if recv == nil {
+		return nil
+	}
+	n, err := namedType(recv)
+	if err != nil {
+		return nil
+	}
+	return n
+}
+
+// constructorResult expects a *types.Func that is type *types.Signature,
+// and returns the *types.Named for the first returned result. It allows
+// a single return result or two returned results if the second is of type error.
+// Otherwise, constructorResult returns nil.
+// If the returned result is a pointer to a named type,
+// this returns the named type rather than the pointer.
+func constructorResult(f *types.Func) (n *types.Named, secondResultIsErr bool) {
+	ctorSig, ok := f.Type().(*types.Signature)
+	if !ok {
+		return nil, false
+	}
+
+	ctorResults := ctorSig.Results()
+	if ctorResults.Len() > 2 || ctorResults.Len() == 0 {
+		return nil, false
+	}
+
+	secondResultIsErr = false
+	if ctorResults.Len() == 2 {
+		// We allow error type as second return value
+		secondResult := ctorResults.At(1)
+		_, ok = secondResult.Type().Underlying().(*types.Interface)
+		if ok && secondResult.Type().String() == "error" {
+			secondResultIsErr = true
+		} else {
+			return nil, false
+		}
+	}
+
+	ctorResult := ctorResults.At(0)
+	ctorResultN, err := namedType(ctorResult)
+	if err != nil {
+		// namedType returns a *types.Named if the passed in
+		// *types.Var is a named type or a pointer to a named type.
+		// This candidate constructor result is neither of those, which means it can't
+		// match the named type of a receiver, so this isn't really a valid constructor.
+		return nil, false
+	}
+
+	return ctorResultN, secondResultIsErr
 }
