@@ -33,4 +33,9 @@ func (nu MyUUID2) Foo() ([]byte, error) { return nil, nil }
 func (nu *MyUUID2) Bar(data []byte) error { return nil }
 
 // This is not a constructor because string is not a named type.
-func NewBaz() string { return "" }
+func NewMyUUID3() string { return "" }
+
+// MyUUID4 should not be picked up via 'fzgen -chain' because there is no constructor.
+type MyUUID4 struct{}
+
+func (u MyUUID4) Foo() ([]byte, error) { return nil, nil }
