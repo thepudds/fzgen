@@ -12,6 +12,11 @@ jobs:
         go-version: [1.17.x, 1.16.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # juggling $PATH is different in Windows PowerShell,
+        # so let's just use bash on Windows too.
+        shell: bash
     steps:
     - name: Install Go
       uses: actions/setup-go@v2
@@ -25,10 +30,24 @@ jobs:
         go test ./fuzzer/...
         go test ./gen
         go test ./...
-    - name: Test (end-to-end, with gotip)
+    - name: Cache gotip
+      id: cache-gotip
+      uses: actions/cache@v2
+      with:
+        path: |
+           ~/go/bin/gotip
+           ~/sdk/gotip
+        key: ${{ runner.os }}-gotip-${{ steps.get-date.outputs.date }}
+    - name: Install gotip
+      if: steps.cache-gotip.outputs.cache-hit != 'true'
       run: |
-        go install golang.org/dl/gotip@latest
+        echo "$PATH"
+        go version
+        # gha currently defaulting to go 1.15. This would need to change for later version.
+        go get golang.org/dl/gotip
         gotip download
+    - name: Test (-end2end, with gotip invoked as gotip)
+      run: |
         gotip version
         echo "Current date is $(date)"
         echo "ls -l ~/go/bin/gotip"
@@ -79,6 +98,8 @@ jobs:
         ls -l ~/go/bin/gotip
         echo "GOROOT=$(gotip env GOROOT)" >>$GITHUB_ENV
         echo "$(gotip env GOROOT)/bin" >>$GITHUB_PATH
+    - name: Checkout code
+      uses: actions/checkout@v2
     - name: Build cache and module cache
       uses: actions/cache@v2
       with:
@@ -96,9 +117,7 @@ jobs:
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
-    - name: Checkout code
-      uses: actions/checkout@v2
-    - name: Test
+    - name: Test using gotip as default go
       run: |
         go version
         go test ./fuzzer/...
