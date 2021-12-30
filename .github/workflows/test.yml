@@ -64,3 +64,35 @@ jobs:
         go test ./gen
         go test ./...
         go test . -end2end
+
+  test-external:
+    strategy:
+        fail-fast: false
+        matrix:
+            os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # juggling $PATH is different in Windows PowerShell,
+        # so let's just use bash on Windows too.
+        shell: bash
+    continue-on-error: true
+    steps:
+    - name: Set PATH
+      run: echo "$HOME/go/bin" >>$GITHUB_PATH
+    - name: Install Gotip
+      run: |
+        echo "$PATH"
+        go version
+        # gha currently defaulting to go 1.15. This would need to change for later version.
+        go get golang.org/dl/gotip
+        gotip download
+        gotip version
+        echo "GOROOT=$(gotip env GOROOT)" >>$GITHUB_ENV
+        echo "$(gotip env GOROOT)/bin" >>$GITHUB_PATH
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Test
+      run: |
+        go version
+        go test . -end2end -allexternal

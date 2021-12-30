@@ -1,7 +1,9 @@
 # Test some external packages to confirm bugs are fixed.
 #
-# To run just this:
+# To run just the first part of this:
 #   go test -run=TestScripts/external -end2end
+# To run the longer full version, including cloning more external packages:
+#   go test -run=TestScripts/external -end2end -allexternal
 
 # Set up a usable module, including the run time dependency for fzgen/fuzzer
 # Note: we force use of our local copy of fzgen via a 'replace' directive.
@@ -23,3 +25,25 @@ grep 'var opts Options' autofuzz_test.go
 ! grep 'var opts filch\.Options' autofuzz_test.go
 
 env FZDEBUG=forcelocal=0
+
+[!allexternal] skip 'skipping remaining tests because -allexternal is not set'
+[!exec:true$exe] skip 'skipping because true not found in path'
+[!exec:git$exe] skip 'skipping because git not found in path'
+[!exec:gotip$exe] skip 'skipping because gotip not found in path'
+# Validate gotip is Go 1.18+.
+exec gotip version
+# We do not envision a Go 2.
+stdout 'go version.*go1\.(1[8-9]|[2-9][0-9]|[1-9][0-9][0-9])'
+
+# Verify running against terraform repo.
+# 66b4d155 is terraform main as of 2021-12-30. 
+exec git clone https://github.com/hashicorp/terraform
+cd terraform
+exec git checkout 66b4d155
+# TODO: does this work with gotip as well, or does gotip's handling of go.sum have an issue?
+go mod tidy
+go get github.com/thepudds/fzgen/fuzzer
+go get -d ./...
+gotip test -exec=true ./...
+fzgen -chain -ctor=. ./...
+gotip test -exec=true ./...

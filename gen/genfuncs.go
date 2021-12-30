@@ -25,10 +25,11 @@ type wrapperOptions struct {
 type emitFunc func(format string, args ...interface{})
 
 var (
-	errSilentSkip          = errors.New("silently skipping wrapper generation")
 	errNoConstructorsMatch = errors.New("no matching constructor")
 	errNoMethodsMatch      = errors.New("no methods found")
+	errNoSteps             = errors.New("no supported methods found")
 	errUnsupportedParams   = errors.New("unsupported parameters")
+	errSilentSkip          = errors.New("silently skipping wrapper generation")
 )
 
 // emitIndependentWrappers emits fuzzing wrappers where possible for the list of functions passed in.
@@ -583,11 +584,12 @@ func avoidCollision(v *types.Var, i int, localPkg *types.Package, allWrapperPara
 
 	collision := false
 	switch paramName {
-	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2":
+	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2", "constraints":
 		// avoid the common variable names for testing.T, testing.F, fzgen.Fuzzer,
 		// as well as variables we might emit (preferring an aesthetically pleasing
 		// name for something like "steps" in the common case over preserving
 		// a rare use of "steps" by a wrapped func).
+		// TODO: as temporary workaround, also exclude 'constraints'.
 		collision = true
 	default:
 		for _, p := range allWrapperParams {

@@ -202,7 +202,7 @@ func FzgenMain() int {
 				msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
 			}
 			switch {
-			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch):
+			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch), errors.Is(err, errNoSteps):
 				fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
 				if len(pkgs) > 1 {
 					continue

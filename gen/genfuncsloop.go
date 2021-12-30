@@ -193,6 +193,7 @@ func emitChainWrapper(emit emitFunc, functions []mod.Func, possibleConstructors 
 	emit("\tsteps := []fuzzer.Step{\n")
 
 	// loop over our the functions we are wrapping, emitting a wrapper where possible.
+	var emittedSteps int
 	for _, function := range functions {
 		err := emitChainStep(emit, function, ctor, options.qualifyAll)
 		if errors.Is(err, errSilentSkip) {
@@ -201,9 +202,21 @@ func emitChainWrapper(emit emitFunc, functions []mod.Func, possibleConstructors 
 		if err != nil {
 			return fmt.Errorf("error processing %s: %v", function.FuncName, err)
 		}
+		emittedSteps++
 	}
 	// close out steps slice
 	emit("\t}\n\n")
+
+	if emittedSteps == 0 {
+		// TODO: we could handle this better, but let's close out this wrapper in case there is another
+		// chain that is useful. The whole output file will be skipped if this was the only candidate chain.
+		emit("\t\t_, _ = target, steps")
+		// close out the f.Fuzz func
+		emit("\t})\n")
+		// close out test func
+		emit("}\n\n")
+		return errNoSteps
+	}
 
 	// emit the chain func
 	emit("\t// Execute a specific chain of steps, with the count, sequence and arguments controlled by fz.Chain\n")
