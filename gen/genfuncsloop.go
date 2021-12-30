@@ -210,7 +210,7 @@ func emitChainWrapper(emit emitFunc, functions []mod.Func, possibleConstructors 
 	if emittedSteps == 0 {
 		// TODO: we could handle this better, but let's close out this wrapper in case there is another
 		// chain that is useful. The whole output file will be skipped if this was the only candidate chain.
-		emit("\t\t_, _ = target, steps")
+		emit("\t\t_, _, _ = fz, target, steps")
 		// close out the f.Fuzz func
 		emit("\t})\n")
 		// close out test func
