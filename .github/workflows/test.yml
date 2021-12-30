@@ -1,4 +1,6 @@
-# With thanks to https://github.com/rogpeppe/go-internal/blob/master/.github/workflows/test.yml
+# With thanks to:
+#    https://github.com/rogpeppe/go-internal/blob/master/.github/workflows/test.yml
+#    https://github.com/mvdan/github-actions-golang
 
 on: [push, pull_request]
 name: Test
@@ -92,6 +94,21 @@ jobs:
         echo "$(gotip env GOROOT)/bin" >>$GITHUB_PATH
     - name: Checkout code
       uses: actions/checkout@v2
+    - uses: actions/cache@v2
+      with:
+        # In order:
+        # * Module download cache
+        # * Build cache (Linux)
+        # * Build cache (Mac)
+        # * Build cache (Windows)
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+          ~/Library/Caches/go-build
+          %LocalAppData%\go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
     - name: Test
       run: |
         go version
@@ -124,6 +141,21 @@ jobs:
         echo "$(gotip env GOROOT)/bin" >>$GITHUB_PATH
     - name: Checkout code
       uses: actions/checkout@v2
+    - uses: actions/cache@v2
+      with:
+        # In order:
+        # * Module download cache
+        # * Build cache (Linux)
+        # * Build cache (Mac)
+        # * Build cache (Windows)
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+          ~/Library/Caches/go-build
+          %LocalAppData%\go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
     - name: Test
       run: |
         go version
