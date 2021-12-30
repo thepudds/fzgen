@@ -106,7 +106,9 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	emit("// if needed, fill in imports or run 'goimports'\n")
 	emit("import (\n")
 	emit("\t\"testing\"\n")
-	emit("\t\"%s\"\n", functions[0].PkgPath)
+	if options.qualifyAll {
+		emit("\t\"%s\"\n", functions[0].PkgPath)
+	}
 	emit("\t\"github.com/thepudds/fzgen/fuzzer\"\n")
 	emit(")\n\n")
 
