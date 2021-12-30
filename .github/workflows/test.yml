@@ -36,6 +36,7 @@ jobs:
       with:
         path: |
            ~/go/bin/gotip
+           ~/go/bin/gotip.exe
            ~/sdk/gotip
         key: ${{ runner.os }}-gotip-${{ steps.get-date.outputs.date }}
     - name: Install gotip
@@ -80,6 +81,7 @@ jobs:
       with:
         path: |
            ~/go/bin/gotip
+           ~/go/bin/gotip.exe
            ~/sdk/gotip
         key: ${{ runner.os }}-gotip-${{ steps.get-date.outputs.date }}
     - name: Install gotip
