@@ -199,4 +199,6 @@ jobs:
     - name: Test
       run: |
         go version
+        go install ./cmd/fzgen
+        go version -m ~/go/bin/fzgen
         go test . -v -end2end -allexternal -run=TestScripts/external_${{ matrix.external-repo }}
