@@ -67,11 +67,12 @@ jobs:
         go test ./...
         go test . -end2end
 
-  test-terraform:
+  test-external-repos:
     strategy:
         fail-fast: false
         matrix:
             os: [ubuntu-latest]
+            external-repo: [tailscale, terraform]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -103,7 +104,7 @@ jobs:
         # gha currently defaulting to go 1.15. This would need to change for later version.
         go get golang.org/dl/gotip
         gotip download
-    - name: Setup gotip
+    - name: Setup gotip as default go
       run: |
         gotip version
         ls -l ~/go/bin/gotip
@@ -130,71 +131,4 @@ jobs:
     - name: Test
       run: |
         go version
-        go test . -v -end2end -allexternal -run=TestScripts/external_terraform
-
-  test-tailscale:
-    strategy:
-        fail-fast: false
-        matrix:
-            os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        # juggling $PATH is different in Windows PowerShell,
-        # so let's just use bash on Windows too.
-        shell: bash
-    continue-on-error: true
-    steps:
-    - name: Set PATH
-      run: echo "$HOME/go/bin" >>$GITHUB_PATH
-    - name: Get date
-      id: get-date
-      run: |
-        # could do +%Y-%U for weekly snapshots
-        echo "::set-output name=date::$(/bin/date -u "+%Y%m%d")"
-    - name: Cache gotip
-      id: cache-gotip
-      uses: actions/cache@v2
-      with:
-        path: |
-           ~/go/bin/gotip
-           ~/sdk/gotip
-        key: ${{ runner.os }}-gotip-${{ steps.get-date.outputs.date }}
-    - name: Install gotip
-      if: steps.cache-gotip.outputs.cache-hit != 'true'
-      run: |
-        echo "$PATH"
-        go version
-        # gha currently defaulting to go 1.15. This would need to change for later version.
-        go get golang.org/dl/gotip
-        gotip download
-    - name: Setup gotip
-      run: |
-        gotip version
-        ls -l ~/go/bin/gotip
-        echo "GOROOT=$(gotip env GOROOT)" >>$GITHUB_ENV
-        echo "$(gotip env GOROOT)/bin" >>$GITHUB_PATH
-    - name: Checkout code
-      uses: actions/checkout@v2
-    - name: Build cache and module cache
-      uses: actions/cache@v2
-      with:
-        # In order:
-        # * Module download cache
-        # * Build cache (Linux)
-        # * Build cache (Mac)
-        # * Build cache (Windows)
-        path: |
-          ~/go/pkg/mod
-          ~/.cache/go-build
-          ~/Library/Caches/go-build
-          %LocalAppData%\go-build
-          $LOCALAPPDATA\go-build
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-    - name: Test
-      run: |
-        go version
-        go test . -v -end2end -allexternal -run=TestScripts/external_tailscale
-  
+        go test . -v -end2end -allexternal -run=TestScripts/external_${{ matrix.external-repo }}
