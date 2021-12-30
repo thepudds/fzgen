@@ -57,6 +57,23 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 		})
 	}
 
+	// TODO: push this logic into findFunc, or maybe as a re-used predicate func.
+	var constructors []mod.Func
+	for _, constructor := range possibleConstructors {
+		// ctorResultN will be the named type if the returned type is a pointer to a named type.
+		ctorResultN, _ := constructorResult(constructor.TypesFunc)
+		if ctorResultN == nil {
+			// Not a named return result, so can't be a constructor.
+			continue
+		}
+		recv := receiver(constructor.TypesFunc)
+		if recv != nil {
+			// This function has a receiver, so not a constructor
+			continue
+		}
+		constructors = append(constructors, constructor)
+	}
+
 	// prepare the output
 	buf := new(bytes.Buffer)
 	var w io.Writer = buf
@@ -86,7 +103,7 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 
 	// loop over our the functions we are wrapping, emitting a wrapper where possible.
 	for _, function := range functions {
-		err := emitIndependentWrapper(emit, function, possibleConstructors, options.qualifyAll)
+		err := emitIndependentWrapper(emit, function, constructors, options.qualifyAll)
 		if errors.Is(err, errSilentSkip) {
 			continue
 		}
@@ -129,7 +146,7 @@ type paramRepr struct {
 // It takes a list of possible constructors to insert into the wrapper body if the
 // constructor is suitable for creating the receiver of a wrapped method.
 // qualifyAll indicates if all variables should be qualified with their package.
-func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructors []mod.Func, qualifyAll bool) error {
+func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod.Func, qualifyAll bool) error {
 	f := function.TypesFunc
 	wrappedSig, ok := f.Type().(*types.Signature)
 	if !ok {
@@ -187,7 +204,7 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructo
 			return errSilentSkip
 		}
 		var paramsToAdd []*types.Var
-		ctorReplace, paramsToAdd, err = constructorReplace(recv, possibleConstructors)
+		ctorReplace, paramsToAdd, err = constructorReplace(recv, constructors)
 		if err != nil {
 			return err
 		}
