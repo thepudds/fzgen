@@ -603,12 +603,12 @@ func avoidCollision(v *types.Var, i int, localPkg *types.Package, allWrapperPara
 
 	collision := false
 	switch paramName {
-	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2", "constraints":
+	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2", "constraints", "version":
 		// avoid the common variable names for testing.T, testing.F, fzgen.Fuzzer,
 		// as well as variables we might emit (preferring an aesthetically pleasing
 		// name for something like "steps" in the common case over preserving
 		// a rare use of "steps" by a wrapped func).
-		// TODO: as temporary workaround, also exclude 'constraints'.
+		// TODO: as temporary workaround, also exclude 'constraints' and 'version'.
 		collision = true
 	default:
 		for _, p := range allWrapperParams {
