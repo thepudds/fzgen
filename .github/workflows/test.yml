@@ -82,19 +82,37 @@ jobs:
     steps:
     - name: Set PATH
       run: echo "$HOME/go/bin" >>$GITHUB_PATH
-    - name: Install Gotip
+    - name: Get date
+      id: get-date
+      run: |
+        # could do +%Y-%U for weekly snapshots
+        echo "::set-output name=date::$(/bin/date -u "+%Y%m%d")"
+    - name: Cache gotip
+      id: cache-gotip
+      uses: actions/cache@v2
+      with:
+        path: |
+           ~/go/bin/gotip
+           ~/sdk/gotip
+        key: ${{ runner.os }}-gotip-${{ steps.get-date.outputs.date }}
+    - name: Install gotip
+      if: steps.cache-gotip.outputs.cache-hit != 'true'
       run: |
         echo "$PATH"
         go version
         # gha currently defaulting to go 1.15. This would need to change for later version.
         go get golang.org/dl/gotip
         gotip download
+    - name: Setup gotip
+      run: |
         gotip version
+        ls -l ~/go/bin/gotip
         echo "GOROOT=$(gotip env GOROOT)" >>$GITHUB_ENV
         echo "$(gotip env GOROOT)/bin" >>$GITHUB_PATH
     - name: Checkout code
       uses: actions/checkout@v2
-    - uses: actions/cache@v2
+    - name: Build cache and module cache
+      uses: actions/cache@v2
       with:
         # In order:
         # * Module download cache
