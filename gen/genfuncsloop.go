@@ -61,18 +61,15 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	}
 
 	for _, constructor := range possibleConstructors {
+		if !isConstructor(constructor.TypesFunc) {
+			continue
+		}
 		// ctorResultN will be the named type if the returned type is a pointer to a named type.
 		ctorResultN, _ := constructorResult(constructor.TypesFunc)
 		if ctorResultN == nil {
 			// Not a named return result, so can't be a constructor.
 			continue
 		}
-		recv := receiver(constructor.TypesFunc)
-		if recv != nil {
-			// This function has a receiver, so not a constructor
-			continue
-		}
-
 		ctorType := types.TypeString(ctorResultN, nil)
 		c := recvTypes[ctorType]
 		if c == nil {

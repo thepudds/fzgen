@@ -55,21 +55,11 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 		})
 	}
 
-	// TODO: push this logic into findFunc, or maybe as a re-used predicate func.
 	var constructors []mod.Func
 	for _, constructor := range possibleConstructors {
-		// ctorResultN will be the named type if the returned type is a pointer to a named type.
-		ctorResultN, _ := constructorResult(constructor.TypesFunc)
-		if ctorResultN == nil {
-			// Not a named return result, so can't be a constructor.
-			continue
+		if isConstructor(constructor.TypesFunc) {
+			constructors = append(constructors, constructor)
 		}
-		recv := receiver(constructor.TypesFunc)
-		if recv != nil {
-			// This function has a receiver, so not a constructor
-			continue
-		}
-		constructors = append(constructors, constructor)
 	}
 
 	// prepare the output
@@ -733,4 +723,20 @@ func constructorResult(f *types.Func) (n *types.Named, secondResultIsErr bool) {
 	}
 
 	return ctorResultN, secondResultIsErr
+}
+
+// isConstructor reports if f is a constructor.
+// It cannot have a receiver, must return a named type or pointer to named type
+// as its first return value, and can optionally have its second return value be type error.
+// This is a more narrow defintion than for example 'go doc',
+// which allows any number of builtin types to be returned in addition to a single named type.
+func isConstructor(f *types.Func) bool {
+	// ctorResultN will be the named type if the returned type is a pointer to a named type.
+	ctorResultN, _ := constructorResult(f)
+	if ctorResultN == nil {
+		// Not a named return result, so can't be a constructor.
+		return false
+	}
+	// Constructors do not have receivers.
+	return receiver(f) == nil
 }
