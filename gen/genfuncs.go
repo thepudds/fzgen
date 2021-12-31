@@ -14,16 +14,16 @@ import (
 )
 
 type wrapperOptions struct {
-	qualifyAll         bool   // qualify all variables with package name
-	insertConstructors bool   // attempt to insert suitable constructors when wrapping methods
-	constructorPattern string // regexp for searching for candidate constructors
-	parallel           bool   // set the Parallel flag in the emitted code, which allows steps of a chain to run in parallel
+	qualifyAll         bool // qualify all variables with package name
+	insertConstructors bool // attempt to insert suitable constructors when wrapping methods
+	parallel           bool // set the Parallel flag in the emitted code, which allows steps of a chain to run in parallel
 }
 
 type emitFunc func(format string, args ...interface{})
 
 var (
 	errNoConstructorsMatch = errors.New("no matching constructor")
+	errNoFunctionsMatch    = errors.New("no functions found")
 	errNoMethodsMatch      = errors.New("no methods found")
 	errNoSteps             = errors.New("no supported methods found")
 	errUnsupportedParams   = errors.New("unsupported parameters")
@@ -33,33 +33,9 @@ var (
 // emitIndependentWrappers emits fuzzing wrappers where possible for the list of functions passed in.
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
 // type such as interface{}.
-func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
-	if len(functions) == 0 {
-		return nil, fmt.Errorf("no matching functions found")
-	}
-
-	// start by hunting for possible constructors in the same package if requested.
-	var possibleConstructors []mod.Func
-	if options.insertConstructors {
-		// We default to the pattern ^New, but allow user-specified patterns.
-		// We don't check the err here because it can be expected to not find anything if there
-		// are no functions that start with New (and this is our second call to FindFunc, so
-		// other problems should have been reported earlier).
-		// TODO: consider related tweak to error reporting in FindFunc?
-		possibleConstructors, _ = findFunc(pkgPattern, options.constructorPattern, nil,
-			flagExcludeFuzzPrefix|flagAllowMultiFuzz|flagRequireExported)
-		// put possibleConstructors into a semi-deterministic order.
-		// TODO: for now, we'll prefer simpler constructors as approximated by length (so 'New' before 'NewSomething').
-		sort.Slice(possibleConstructors, func(i, j int) bool {
-			return len(possibleConstructors[i].FuncName) < len(possibleConstructors[j].FuncName)
-		})
-	}
-
-	var constructors []mod.Func
-	for _, constructor := range possibleConstructors {
-		if isConstructor(constructor.TypesFunc) {
-			constructors = append(constructors, constructor)
-		}
+func emitIndependentWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
+	if len(pkgFuncs.functions) == 0 {
+		return nil, errNoFunctionsMatch
 	}
 
 	// prepare the output
@@ -75,22 +51,26 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 	emit("import (\n")
 	emit("\t\"testing\"\n")
 	if options.qualifyAll {
-		emit("\t\"%s\"\n", functions[0].PkgPath)
+		emit("\t\"%s\"\n", pkgPath)
 	}
 	emit("\t\"github.com/thepudds/fzgen/fuzzer\"\n")
 	emit(")\n\n")
 
 	// put our functions we want to wrap into a deterministic order
-	sort.Slice(functions, func(i, j int) bool {
+	sort.Slice(pkgFuncs.functions, func(i, j int) bool {
 		// types.Func.String outputs strings like:
 		//   func (github.com/thepudds/fzgo/genfuzzfuncs/examples/test-constructor-injection.A).ValMethodWithArg(i int) bool
 		// works ok for clustering results, though pointer receiver and non-pointer receiver methods don't cluster.
 		// could strip '*' or sort another way, but probably ok, at least for now.
-		return functions[i].TypesFunc.String() < functions[j].TypesFunc.String()
+		return pkgFuncs.functions[i].TypesFunc.String() < pkgFuncs.functions[j].TypesFunc.String()
 	})
 
 	// loop over our the functions we are wrapping, emitting a wrapper where possible.
-	for _, function := range functions {
+	for _, function := range pkgFuncs.functions {
+		var constructors []mod.Func
+		if options.insertConstructors {
+			constructors = pkgFuncs.constructors
+		}
 		err := emitIndependentWrapper(emit, function, constructors, options.qualifyAll)
 		if errors.Is(err, errSilentSkip) {
 			continue

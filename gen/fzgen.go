@@ -13,11 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/thepudds/fzgen/gen/internal/mod"
 	"golang.org/x/tools/imports"
 )
 
@@ -98,53 +96,19 @@ func FzgenMain() int {
 		*outFileFlag = "autofuzzchain_test.go"
 	}
 
-	// Search for functions in the requested package that match the supplied func regex.
-	options := flagExcludeFuzzPrefix | flagAllowMultiFuzz
+	// Search for functions in the requested packages that match the supplied func and ctor regex.
+	options := flagExcludeFuzzPrefix | flagMultiMatch
 	if !*unexportedFlag {
 		options |= flagRequireExported
 	}
-	comboPattern := fmt.Sprintf("(%s)|(%s)", *funcPatternFlag, *constructorPatternFlag)
-	allFunctions, err := findFunc(pkgPattern, comboPattern, nil, options)
+	pkgs, err := findFuncsGrouped(pkgPattern, *funcPatternFlag, *constructorPatternFlag, options)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fzgen: error: %v\n", err)
 		return 1
 	}
 
-	// Group our functions by package.
-	// TODO: consider changing signature of findFunc to return funcs grouped by package.
-	type pkg struct {
-		pkgPath      string
-		functions    []mod.Func
-		constructors []mod.Func
-	}
-	m := make(map[string]*pkg)
-	for _, function := range allFunctions {
-		p := m[function.PkgPath]
-		if p == nil {
-			p = &pkg{pkgPath: function.PkgPath}
-			m[function.PkgPath] = p
-		}
-		p.functions = append(p.functions, function)
-		if isConstructor(function.TypesFunc) {
-			p.constructors = append(p.constructors, function)
-		}
-	}
-	var pkgs []*pkg
-	for _, p := range m {
-		pkgs = append(pkgs, p)
-		// put constructors a semi-deterministic order.
-		// TODO: for now, we'll prefer simpler constructors as approximated by length (so 'New' before 'NewSomething').
-		sort.Slice(p.constructors, func(i, j int) bool {
-			return len(p.constructors[i].FuncName) < len(p.constructors[j].FuncName)
-		})
-
-	}
-	sort.Slice(pkgs, func(i, j int) bool {
-		return pkgs[i].pkgPath < pkgs[j].pkgPath
-	})
-
 	// Check if we are looking at one package vs. multiple.
-	if len(m) > 1 && hasPath(*outFileFlag) {
+	if len(pkgs) > 1 && hasPath(*outFileFlag) {
 		fmt.Fprint(os.Stderr, "fzgen: error: -o can only specify a file name and not a path when the package pattern matches multiple packages\n")
 		return 2
 	}
@@ -203,16 +167,15 @@ func FzgenMain() int {
 		wrapperOpts := wrapperOptions{
 			qualifyAll:         qualifyAll,
 			insertConstructors: *constructorFlag,
-			constructorPattern: *constructorPatternFlag,
 			parallel:           *parallelFlag,
 		}
 
 		// Do the actual work of emitting our wrappers.
 		var out []byte
 		if !*chainFlag {
-			out, err = emitIndependentWrappers(pkgs[i].pkgPath, pkgs[i].functions, wrapperPkgName, wrapperOpts)
+			out, err = emitIndependentWrappers(pkgs[i].pkgPath, pkgs[i], wrapperPkgName, wrapperOpts)
 		} else {
-			out, err = emitChainWrappers(pkgs[i].pkgPath, pkgs[i].functions, wrapperPkgName, wrapperOpts)
+			out, err = emitChainWrappers(pkgs[i].pkgPath, pkgs[i], wrapperPkgName, wrapperOpts)
 
 			// Handle certain common errors gracefully, including skipping & continuing if multiple target packages.
 			msgDest, msgPrefix := os.Stderr, "fzgen:"
@@ -220,7 +183,7 @@ func FzgenMain() int {
 				msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
 			}
 			switch {
-			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch), errors.Is(err, errNoSteps):
+			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch), errors.Is(err, errNoSteps), errors.Is(err, errNoFunctionsMatch):
 				fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
 				if len(pkgs) > 1 {
 					continue

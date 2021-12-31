@@ -16,19 +16,8 @@ import (
 // Each wrapper consists of a target from a constructor and a set of steps that include invoking methods on the target.
 // It might skip a function if it has no input parameters, or if it has a non-fuzzable parameter
 // type such as interface{}.
-func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
-	// Start by hunting for possible constructors in the same package if requested.
-	var possibleConstructors []mod.Func
-	if options.insertConstructors {
-		// We default to the pattern ^New, but allow user-specified patterns.
-		// We don't check the err here because it can be expected to not find anything if there
-		// are no functions that start with New (and this is our second call to FindFunc, so
-		// other problems should have been reported earlier).
-		// TODO: consider related tweak to error reporting in FindFunc?
-		possibleConstructors, _ = findFunc(pkgPattern, options.constructorPattern, nil,
-			flagExcludeFuzzPrefix|flagAllowMultiFuzz|flagRequireExported)
-	}
-
+func emitChainWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
+	possibleConstructors := pkgFuncs.constructors
 	if len(possibleConstructors) == 0 {
 		return nil, errNoConstructorsMatch
 	}
@@ -41,7 +30,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 		steps        []mod.Func
 	}
 	recvTypes := make(map[string]*chain)
-	for _, function := range functions {
+	for _, function := range pkgFuncs.functions {
 		// recvN will be the named type if the receiver is a pointer receiver.
 		recvN := receiver(function.TypesFunc)
 		if recvN == nil {
@@ -102,7 +91,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	emit("import (\n")
 	emit("\t\"testing\"\n")
 	if options.qualifyAll {
-		emit("\t\"%s\"\n", functions[0].PkgPath)
+		emit("\t\"%s\"\n", pkgPath)
 	}
 	emit("\t\"github.com/thepudds/fzgen/fuzzer\"\n")
 	emit(")\n\n")
