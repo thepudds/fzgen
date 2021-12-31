@@ -1,7 +1,7 @@
 # Test some external packages to confirm bugs are fixed.
 #
 # To run just this:
-#   go test -run=TestScripts/external -end2end
+#   go test -run=TestScripts/external_packages -end2end
 
 # Set up a usable module, including the run time dependency for fzgen/fuzzer
 # Note: we force use of our local copy of fzgen via a 'replace' directive.

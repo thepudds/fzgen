@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/tools/imports"
 )
 
 func TestStrings(t *testing.T) {
@@ -66,6 +67,10 @@ func TestStrings(t *testing.T) {
 			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
+			}
+			out, err = imports.Process("autofuzz_test.go", out, nil)
+			if err != nil {
+				t.Fatalf("imports.Process() failed: %v", err)
 			}
 
 			got := string(out)

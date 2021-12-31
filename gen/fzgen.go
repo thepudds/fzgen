@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/thepudds/fzgen/gen/internal/mod"
+	"golang.org/x/tools/imports"
 )
 
 // one way to test this is against the stdlib (here, this just tests that fzgen generates and the result compiles successfully):
@@ -202,7 +203,7 @@ func FzgenMain() int {
 				msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
 			}
 			switch {
-			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch):
+			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch), errors.Is(err, errNoSteps):
 				fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
 				if len(pkgs) > 1 {
 					continue
@@ -220,7 +221,21 @@ func FzgenMain() int {
 			fail(err)
 		}
 
-		err = ioutil.WriteFile(outFile, out, 0o644)
+		// Fix up any needed imports.
+		var adjusted []byte
+		abs, err := filepath.Abs(outFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fzgen: warning: continuing after failing to find abs path:", err)
+			abs = outFile
+		}
+		adjusted, err = imports.Process(abs, out, nil)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fzgen: warning: continuing after failing to automatically adjust imports:", err)
+			adjusted = out
+		}
+
+		// Write the output.
+		err = ioutil.WriteFile(outFile, adjusted, 0o644)
 		if err != nil {
 			fail(err)
 		}

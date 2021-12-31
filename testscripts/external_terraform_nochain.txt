@@ -1,0 +1,27 @@
+# Stress test with the full terraform repo without -chain.
+#
+# To run just this, including cloning the external packages:
+#   go test -run=TestScripts/external_terraform -end2end -allexternal
+
+[!exec:true$exe] skip 'skipping because true not found in path'
+[!exec:git$exe] skip 'skipping because git not found in path'
+[!exec:gotip$exe] skip 'skipping because gotip not found in path'
+
+# Validate gotip is Go 1.18+.
+exec gotip version
+# We do not envision a Go 2.
+stdout 'go version.*go1\.(1[8-9]|[2-9][0-9]|[1-9][0-9][0-9])'
+
+# Verify running against terraform repo.
+# 66b4d155 is terraform main as of 2021-12-30. 
+[!allexternal] skip 'skipping longer external test because -allexternal is not set'
+exec git clone https://github.com/hashicorp/terraform
+cd terraform
+exec git checkout 66b4d155
+exec gotip mod tidy
+exec gotip get github.com/thepudds/fzgen/fuzzer
+exec gotip get -d ./...
+exec gotip test -exec=true ./...
+fzgen ./...
+exec gotip test -exec=true ./...
+cd ..

@@ -7,11 +7,9 @@ import (
 	"go/types"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/thepudds/fzgen/gen/internal/mod"
-	"golang.org/x/tools/imports"
 )
 
 // emitChainWrappers emits a set of fuzzing wrappers where possible for the list of functions passed in.
@@ -63,18 +61,15 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	}
 
 	for _, constructor := range possibleConstructors {
+		if !isConstructor(constructor.TypesFunc) {
+			continue
+		}
 		// ctorResultN will be the named type if the returned type is a pointer to a named type.
 		ctorResultN, _ := constructorResult(constructor.TypesFunc)
 		if ctorResultN == nil {
 			// Not a named return result, so can't be a constructor.
 			continue
 		}
-		recv := receiver(constructor.TypesFunc)
-		if recv != nil {
-			// This function has a receiver, so not a constructor
-			continue
-		}
-
 		ctorType := types.TypeString(ctorResultN, nil)
 		c := recvTypes[ctorType]
 		if c == nil {
@@ -106,7 +101,9 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 	emit("// if needed, fill in imports or run 'goimports'\n")
 	emit("import (\n")
 	emit("\t\"testing\"\n")
-	emit("\t\"%s\"\n", functions[0].PkgPath)
+	if options.qualifyAll {
+		emit("\t\"%s\"\n", functions[0].PkgPath)
+	}
 	emit("\t\"github.com/thepudds/fzgen/fuzzer\"\n")
 	emit(")\n\n")
 
@@ -135,26 +132,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 		return nil, firstErr
 	}
 
-	// Fix up any needed imports.
-	// TODO: perf: this seems slower than expected. Check what style of path should be used for filename?
-	// imports.Process has this comment:
-	//   Note that filename's directory influences which imports can be chosen,
-	//   so it is important that filename be accurate.
-	// TODO: move this to fzgen.go
-	filename, err := filepath.Abs(("autofuzz_test.go"))
-	warn := func(err error) {
-		fmt.Fprintln(os.Stderr, "fzgen: warning: continuing after failing to automatically adjust imports:", err)
-	}
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	out, err := imports.Process(filename, buf.Bytes(), nil)
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	return out, nil
+	return buf.Bytes(), nil
 }
 
 // emitChainWrapper emits one fuzzing wrapper where possible for the list of functions passed in.
@@ -193,6 +171,7 @@ func emitChainWrapper(emit emitFunc, functions []mod.Func, possibleConstructors 
 	emit("\tsteps := []fuzzer.Step{\n")
 
 	// loop over our the functions we are wrapping, emitting a wrapper where possible.
+	var emittedSteps int
 	for _, function := range functions {
 		err := emitChainStep(emit, function, ctor, options.qualifyAll)
 		if errors.Is(err, errSilentSkip) {
@@ -201,9 +180,21 @@ func emitChainWrapper(emit emitFunc, functions []mod.Func, possibleConstructors 
 		if err != nil {
 			return fmt.Errorf("error processing %s: %v", function.FuncName, err)
 		}
+		emittedSteps++
 	}
 	// close out steps slice
 	emit("\t}\n\n")
+
+	if emittedSteps == 0 {
+		// TODO: we could handle this better, but let's close out this wrapper in case there is another
+		// chain that is useful. The whole output file will be skipped if this was the only candidate chain.
+		emit("\t\t_, _, _ = fz, target, steps")
+		// close out the f.Fuzz func
+		emit("\t})\n")
+		// close out test func
+		emit("}\n\n")
+		return errNoSteps
+	}
 
 	// emit the chain func
 	emit("\t// Execute a specific chain of steps, with the count, sequence and arguments controlled by fz.Chain\n")

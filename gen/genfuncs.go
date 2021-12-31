@@ -7,12 +7,10 @@ import (
 	"go/types"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/thepudds/fzgen/fuzzer"
 	"github.com/thepudds/fzgen/gen/internal/mod"
-	"golang.org/x/tools/imports"
 )
 
 type wrapperOptions struct {
@@ -25,10 +23,11 @@ type wrapperOptions struct {
 type emitFunc func(format string, args ...interface{})
 
 var (
-	errSilentSkip          = errors.New("silently skipping wrapper generation")
 	errNoConstructorsMatch = errors.New("no matching constructor")
 	errNoMethodsMatch      = errors.New("no methods found")
+	errNoSteps             = errors.New("no supported methods found")
 	errUnsupportedParams   = errors.New("unsupported parameters")
+	errSilentSkip          = errors.New("silently skipping wrapper generation")
 )
 
 // emitIndependentWrappers emits fuzzing wrappers where possible for the list of functions passed in.
@@ -56,6 +55,13 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 		})
 	}
 
+	var constructors []mod.Func
+	for _, constructor := range possibleConstructors {
+		if isConstructor(constructor.TypesFunc) {
+			constructors = append(constructors, constructor)
+		}
+	}
+
 	// prepare the output
 	buf := new(bytes.Buffer)
 	var w io.Writer = buf
@@ -68,7 +74,9 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 	emit("// if needed, fill in imports or run 'goimports'\n")
 	emit("import (\n")
 	emit("\t\"testing\"\n")
-	emit("\t\"%s\"\n", functions[0].PkgPath)
+	if options.qualifyAll {
+		emit("\t\"%s\"\n", functions[0].PkgPath)
+	}
 	emit("\t\"github.com/thepudds/fzgen/fuzzer\"\n")
 	emit(")\n\n")
 
@@ -83,7 +91,7 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 
 	// loop over our the functions we are wrapping, emitting a wrapper where possible.
 	for _, function := range functions {
-		err := emitIndependentWrapper(emit, function, possibleConstructors, options.qualifyAll)
+		err := emitIndependentWrapper(emit, function, constructors, options.qualifyAll)
 		if errors.Is(err, errSilentSkip) {
 			continue
 		}
@@ -92,25 +100,7 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 		}
 	}
 
-	// fix up any needed imports.
-	// TODO: perf: this seems slower than expected. Check what style of path should be used for filename?
-	// imports.Process has this comment:
-	//   Note that filename's directory influences which imports can be chosen,
-	//   so it is important that filename be accurate.
-	filename, err := filepath.Abs(("autofuzz_test.go"))
-	warn := func(err error) {
-		fmt.Fprintln(os.Stderr, "genfuzzfuncs: warning: continuing after failing to automatically adjust imports:", err)
-	}
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	out, err := imports.Process(filename, buf.Bytes(), nil)
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	return out, nil
+	return buf.Bytes(), nil
 }
 
 // paramRepr contains string representations of inputParams to the wrapper function that we are
@@ -126,7 +116,7 @@ type paramRepr struct {
 // It takes a list of possible constructors to insert into the wrapper body if the
 // constructor is suitable for creating the receiver of a wrapped method.
 // qualifyAll indicates if all variables should be qualified with their package.
-func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructors []mod.Func, qualifyAll bool) error {
+func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod.Func, qualifyAll bool) error {
 	f := function.TypesFunc
 	wrappedSig, ok := f.Type().(*types.Signature)
 	if !ok {
@@ -184,7 +174,7 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, possibleConstructo
 			return errSilentSkip
 		}
 		var paramsToAdd []*types.Var
-		ctorReplace, paramsToAdd, err = constructorReplace(recv, possibleConstructors)
+		ctorReplace, paramsToAdd, err = constructorReplace(recv, constructors)
 		if err != nil {
 			return err
 		}
@@ -583,11 +573,12 @@ func avoidCollision(v *types.Var, i int, localPkg *types.Package, allWrapperPara
 
 	collision := false
 	switch paramName {
-	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2":
+	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2", "constraints":
 		// avoid the common variable names for testing.T, testing.F, fzgen.Fuzzer,
 		// as well as variables we might emit (preferring an aesthetically pleasing
 		// name for something like "steps" in the common case over preserving
 		// a rare use of "steps" by a wrapped func).
+		// TODO: as temporary workaround, also exclude 'constraints'.
 		collision = true
 	default:
 		for _, p := range allWrapperParams {
@@ -732,4 +723,20 @@ func constructorResult(f *types.Func) (n *types.Named, secondResultIsErr bool) {
 	}
 
 	return ctorResultN, secondResultIsErr
+}
+
+// isConstructor reports if f is a constructor.
+// It cannot have a receiver, must return a named type or pointer to named type
+// as its first return value, and can optionally have its second return value be type error.
+// This is a more narrow defintion than for example 'go doc',
+// which allows any number of builtin types to be returned in addition to a single named type.
+func isConstructor(f *types.Func) bool {
+	// ctorResultN will be the named type if the returned type is a pointer to a named type.
+	ctorResultN, _ := constructorResult(f)
+	if ctorResultN == nil {
+		// Not a named return result, so can't be a constructor.
+		return false
+	}
+	// Constructors do not have receivers.
+	return receiver(f) == nil
 }

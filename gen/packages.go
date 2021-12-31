@@ -213,7 +213,7 @@ func isExportedFunc(f *types.Func) bool {
 	n, err := namedType(recv)
 	if err != nil {
 		// don't treat as fatal error.
-		fmt.Fprintf(os.Stderr, "genfuzzfuncs: warning: failed to determine if exported for receiver %v for func %v: %v\n",
+		fmt.Fprintf(os.Stderr, "fzgen: warning: failed to determine if exported for receiver %v for func %v: %v\n",
 			recv, f, err)
 		return false
 	}
