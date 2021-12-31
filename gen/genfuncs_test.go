@@ -36,22 +36,24 @@ func TestTypes(t *testing.T) {
 			t.Parallel()
 
 			pkgPattern := "github.com/thepudds/fzgen/examples/inputs/test-types"
-			options := flagExcludeFuzzPrefix | flagAllowMultiFuzz
+			options := flagExcludeFuzzPrefix | flagMultiMatch
 			if tt.onlyExported {
 				options |= flagRequireExported
 			}
-			functions, err := findFunc(pkgPattern, ".", nil, options)
+			pkgs, err := findFuncsGrouped(pkgPattern, ".", "^New", options)
 			if err != nil {
-				t.Fatalf("FindFuncfail() failed: %v", err)
+				t.Fatalf("findFuncsGrouped() failed: %v", err)
+			}
+			if len(pkgs) != 1 {
+				t.Fatalf("findFuncsGrouped() found unexpected pkgs count: %d", len(pkgs))
 			}
 
 			wrapperOpts := wrapperOptions{
 				qualifyAll:         tt.qualifyAll,
 				insertConstructors: true,
-				constructorPattern: "^New",
 			}
 
-			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, pkgs[0], "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -129,21 +131,23 @@ func TestConstructorInjection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			pkgPattern := "github.com/thepudds/fzgen/examples/inputs/test-constructor-injection"
-			options := flagExcludeFuzzPrefix | flagAllowMultiFuzz
+			options := flagExcludeFuzzPrefix | flagMultiMatch
 			if tt.onlyExported {
 				options |= flagRequireExported
 			}
-			functions, err := findFunc(pkgPattern, ".", nil, options)
+			pkgs, err := findFuncsGrouped(pkgPattern, ".", "^New", options)
 			if err != nil {
-				t.Fatalf("FindFuncfail() failed: %v", err)
+				t.Fatalf("findFuncsGrouped() failed: %v", err)
+			}
+			if len(pkgs) != 1 {
+				t.Fatalf("findFuncsGrouped() found unexpected pkgs count: %d", len(pkgs))
 			}
 
 			wrapperOpts := wrapperOptions{
 				qualifyAll:         tt.qualifyAll,
 				insertConstructors: tt.injectConstructors,
-				constructorPattern: "^New",
 			}
-			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, pkgs[0], "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
@@ -213,22 +217,24 @@ func TestExported(t *testing.T) {
 			t.Parallel()
 
 			pkgPattern := "github.com/thepudds/fzgen/examples/inputs/test-exported"
-			options := flagExcludeFuzzPrefix | flagAllowMultiFuzz
+			options := flagExcludeFuzzPrefix | flagMultiMatch
 			if tt.onlyExported {
 				options |= flagRequireExported
 			}
-			functions, err := findFunc(pkgPattern, ".", nil, options)
+			pkgs, err := findFuncsGrouped(pkgPattern, ".", "^New", options)
 			if err != nil {
-				t.Fatalf("FindFuncfail() failed: %v", err)
+				t.Fatalf("findFuncsGrouped() failed: %v", err)
+			}
+			if len(pkgs) != 1 {
+				t.Fatalf("findFuncsGrouped() found unexpected pkgs count: %d", len(pkgs))
 			}
 
 			wrapperOpts := wrapperOptions{
 				qualifyAll:         tt.qualifyAll,
 				insertConstructors: true,
-				constructorPattern: "^New",
 			}
 
-			out, err := emitIndependentWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
+			out, err := emitIndependentWrappers(pkgPattern, pkgs[0], "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}

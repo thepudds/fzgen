@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/thepudds/fzgen/gen/internal/mod"
@@ -17,16 +18,85 @@ import (
 type findFuncFlag uint
 
 const (
-	flagAllowMultiFuzz findFuncFlag = 1 << iota
+	flagMultiMatch findFuncFlag = 1 << iota
 	flagRequireFuzzPrefix
 	flagExcludeFuzzPrefix
 	flagRequireExported
 )
 
-// findFunc searches for requested functions matching a package pattern and func pattern.
+// Group our functions by package.
+// TODO: probably rename internal/mod to internal/pkg and move these items there.
+type pkg struct {
+	pkgPath      string
+	functions    []mod.Func
+	constructors []mod.Func
+}
+
+// findFuncsGrouped searches for requested functions matching a package pattern and func pattern,
+// returning them grouped by package.
+func findFuncsGrouped(pkgPattern, funcPattern, constructorPattern string, flags findFuncFlag) ([]*pkg, error) {
+	report := func(err error) ([]*pkg, error) {
+		return nil, fmt.Errorf("finding funcs: %v", err)
+	}
+
+	funcRe, err := regexp.Compile(funcPattern)
+	if err != nil {
+		return report(err)
+	}
+	constructorRe, err := regexp.Compile(constructorPattern)
+	if err != nil {
+		return report(err)
+	}
+	comboPattern := fmt.Sprintf("(%s)|(%s)", funcPattern, constructorPattern)
+
+	allFunctions, err := findFuncs(pkgPattern, comboPattern, nil, flags)
+	if err != nil {
+		return report(err)
+	}
+
+	// Group by package, and catagorize into candidate funcs and constructors.
+	m := make(map[string]*pkg)
+	for _, function := range allFunctions {
+		p := m[function.PkgPath]
+		if p == nil {
+			p = &pkg{pkgPath: function.PkgPath}
+			m[function.PkgPath] = p
+		}
+		if funcRe.MatchString(function.FuncName) {
+			p.functions = append(p.functions, function)
+		}
+		if isConstructor(function.TypesFunc) && constructorRe.MatchString(function.FuncName) {
+			p.constructors = append(p.constructors, function)
+		}
+	}
+
+	var pkgs []*pkg
+	for _, p := range m {
+		pkgs = append(pkgs, p)
+		// put constructors a deterministic order.
+		// TODO: for now, we'll prefer simpler constructors as approximated by length (so 'New' before 'NewSomething').
+		sort.Slice(p.constructors, func(i, j int) bool {
+			if len(p.constructors[i].FuncName) < len(p.constructors[j].FuncName) {
+				return true
+			}
+			if len(p.constructors[i].FuncName) == len(p.constructors[j].FuncName) {
+				return p.constructors[i].FuncName < p.constructors[j].FuncName
+			}
+			return false
+		})
+	}
+
+	sort.Slice(pkgs, func(i, j int) bool {
+		return pkgs[i].pkgPath < pkgs[j].pkgPath
+	})
+
+	return pkgs, nil
+}
+
+// findFuncs searches for requested functions matching a package pattern and func pattern.
 // TODO: this is a temporary fork from fzgo/fuzz.FindFunc.
 // TODO: maybe change flags to a predicate function?
-func findFunc(pkgPattern, funcPattern string, env []string, flags findFuncFlag) ([]mod.Func, error) {
+func findFuncs(pkgPattern, funcPattern string, env []string, flags findFuncFlag) ([]mod.Func, error) {
 	report := func(err error) error {
 		return fmt.Errorf("error while loading packages for pattern %v: %v", pkgPattern, err)
 	}
@@ -92,7 +162,7 @@ func findFunc(pkgPattern, funcPattern string, env []string, flags findFuncFlag) 
 				if matchedPattern {
 					// found a match.
 					// check if we already found a match in a prior iteration our of chains.
-					if len(result) > 0 && flags&flagAllowMultiFuzz == 0 {
+					if len(result) > 0 && flags&flagMultiMatch == 0 {
 						return nil, fmt.Errorf("multiple matches not allowed. multiple matches for pattern %v and func %v: %v.%v and %v.%v",
 							pkgPattern, funcPattern, pkg.PkgPath, id.Name, result[0].PkgPath, result[0].FuncName)
 					}
