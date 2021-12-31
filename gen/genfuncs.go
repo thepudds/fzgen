@@ -149,10 +149,6 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod
 	// 		})
 	var ctorReplace ctorMatch
 	if recv != nil {
-		if recv.Name() == "" {
-			// this can be an interface method. skip, nothing to do here.
-			return errSilentSkip
-		}
 		var paramsToAdd []*types.Var
 		ctorReplace, paramsToAdd, err = constructorReplace(recv, constructors)
 		if err != nil {
