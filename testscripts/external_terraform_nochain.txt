@@ -1,7 +1,7 @@
 # Stress test with the full terraform repo without -chain.
 #
 # To run just this, including cloning the external packages:
-#   go test -run=TestScripts/external_terraform -end2end -allexternal
+#   go test -run=TestScripts/external_terraform_nochain -end2end -allexternal
 
 [!exec:true$exe] skip 'skipping because true not found in path'
 [!exec:git$exe] skip 'skipping because git not found in path'
@@ -21,7 +21,8 @@ exec git checkout 66b4d155
 exec gotip mod tidy
 exec gotip get github.com/thepudds/fzgen/fuzzer
 exec gotip get -d ./...
-exec gotip test -exec=true ./...
+# exec gotip test -exec=true ./...
 fzgen ./...
+stdout 'fzgen: created 3 files'
 exec gotip test -exec=true ./...
 cd ..

@@ -103,25 +103,41 @@ func FzgenMain() int {
 	if !*unexportedFlag {
 		options |= flagRequireExported
 	}
-	functions, err := findFunc(pkgPattern, *funcPatternFlag, nil, options)
+	comboPattern := fmt.Sprintf("(%s)|(%s)", *funcPatternFlag, *constructorPatternFlag)
+	allFunctions, err := findFunc(pkgPattern, comboPattern, nil, options)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fzgen: error: %v\n", err)
 		return 1
 	}
 
 	// Group our functions by package.
-	// TODO: probably change signature of findFunc to return funcs grouped by package.
+	// TODO: consider changing signature of findFunc to return funcs grouped by package.
 	type pkg struct {
-		pkgPath   string
-		functions []mod.Func
+		pkgPath      string
+		functions    []mod.Func
+		constructors []mod.Func
 	}
-	m := make(map[string][]mod.Func)
-	for _, function := range functions {
-		m[function.PkgPath] = append(m[function.PkgPath], function)
+	m := make(map[string]*pkg)
+	for _, function := range allFunctions {
+		p := m[function.PkgPath]
+		if p == nil {
+			p = &pkg{pkgPath: function.PkgPath}
+			m[function.PkgPath] = p
+		}
+		p.functions = append(p.functions, function)
+		if isConstructor(function.TypesFunc) {
+			p.constructors = append(p.constructors, function)
+		}
 	}
-	var pkgs []pkg
-	for k, v := range m {
-		pkgs = append(pkgs, pkg{k, v})
+	var pkgs []*pkg
+	for _, p := range m {
+		pkgs = append(pkgs, p)
+		// put constructors a semi-deterministic order.
+		// TODO: for now, we'll prefer simpler constructors as approximated by length (so 'New' before 'NewSomething').
+		sort.Slice(p.constructors, func(i, j int) bool {
+			return len(p.constructors[i].FuncName) < len(p.constructors[j].FuncName)
+		})
+
 	}
 	sort.Slice(pkgs, func(i, j int) bool {
 		return pkgs[i].pkgPath < pkgs[j].pkgPath
@@ -139,6 +155,7 @@ func FzgenMain() int {
 	}
 
 	// Loop over our packages, and start our real work.
+	var generatedFiles int
 	for i := range pkgs {
 		if len(pkgs[i].functions) == 0 {
 			continue
@@ -220,6 +237,7 @@ func FzgenMain() int {
 		if err != nil {
 			fail(err)
 		}
+		generatedFiles++
 
 		// Fix up any needed imports.
 		var adjusted []byte
@@ -248,6 +266,10 @@ func FzgenMain() int {
 			}
 		}
 		fmt.Println("fzgen: created", rel)
+	}
+
+	if generatedFiles > 1 {
+		fmt.Printf("fzgen: created %d files\n", generatedFiles)
 	}
 
 	return 0
