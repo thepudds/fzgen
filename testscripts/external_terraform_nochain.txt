@@ -1,4 +1,5 @@
-# Stress test with the full terraform repo without -chain.
+# Run fzgen against the full terraform repo without -chain, and confirm results all compile.
+# The count of created files are for linux.
 #
 # To run just this, including cloning the external packages:
 #   go test -run=TestScripts/external_terraform_nochain -end2end -allexternal
@@ -21,8 +22,7 @@ exec git checkout 66b4d155
 exec gotip mod tidy
 exec gotip get github.com/thepudds/fzgen/fuzzer
 exec gotip get -d ./...
-# exec gotip test -exec=true ./...
 fzgen ./...
-stdout 'fzgen: created 3 files'
+stdout 'fzgen: created 109 files'
 exec gotip test -exec=true ./...
 cd ..
