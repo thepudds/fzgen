@@ -14,7 +14,7 @@ type Call struct {
 	ArgSource []ArgSource // list of how to create arguments for this Step. Zero len ==> all new args. If len is > args, ignore extra.
 }
 
-// ArgSource represents how to obtain values for one agument to an ExecStep.
+// ArgSource represents how to obtain values for one argument to an ExecStep.
 // Values can come from:
 //     reusing inputs to other ExecSteps
 //     reusing outputs from other Exect steps

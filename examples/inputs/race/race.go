@@ -41,6 +41,6 @@ func (m *MySafeMap) Load(key [16]byte) *Request {
 }
 
 type Request struct {
-	Answer       int8 // TODO: change to int when cmd/go has the equivalent of go-fuzz sonar or libfuzzer comparision instrumentation
+	Answer       int8 // TODO: change to int when cmd/go has the equivalent of go-fuzz sonar or libfuzzer comparison instrumentation
 	deepQuestion int
 }

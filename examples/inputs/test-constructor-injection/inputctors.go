@@ -36,7 +36,7 @@ func (r B) ValMethodNoArg() bool         { return r.c == 0 }
 // Package is roughly modeled on go/types.Package,
 // which has a collision between a parameter name used for
 // for the constructor and a parameter name used in a later function
-// under test. (The colliding paramater name happens to be 'name',
+// under test. (The colliding parameter name happens to be 'name',
 // though the actual name doesn't matter -- just that it collides).
 type Package struct {
 	path string

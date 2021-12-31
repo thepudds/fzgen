@@ -14,7 +14,7 @@
 // The intent is that this example is run sequentially (that is, not with concurrent steps).
 //
 // (go-fuzz's sonar won't look at a [32]byte sha256, and
-// neither will the current value comparision instrumentation in 'go test -fuzz=.',
+// neither will the current value comparison instrumentation in 'go test -fuzz=.',
 // and there are no magic literals to automatically learn for a dictionary).
 package returnexample
 

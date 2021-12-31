@@ -415,7 +415,7 @@ func (f *Fuzzer) calcSize(fzgoSrc *randSource) (size int, ok bool) {
 // // used for a given numeric reflect.Value, and panics otherwise.
 // // reflect.Int always uses 8 bytes for consistency  across platforms.
 // func kindNumericSize(k reflect.Kind) int {
-// 	// recall, byte and rune are type aliases, and hence are convered.
+// 	// recall, byte and rune are type aliases, and hence are covered.
 // 	switch k {
 // 	case reflect.Int, reflect.Int64, reflect.Uint64, reflect.Float64:
 // 		return 8
@@ -434,7 +434,7 @@ func (f *Fuzzer) calcSize(fzgoSrc *randSource) (size int, ok bool) {
 // func (f *Fuzzer) fillNumeric(v reflect.Value) {
 // 	bits := f.numericDraw(v.Kind())
 
-// 	// recall, byte and rune are type aliases, and hence are convered.
+// 	// recall, byte and rune are type aliases, and hence are covered.
 // 	switch v.Kind() {
 // 	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
 // 		v.SetInt(int64(bits))
