@@ -73,7 +73,7 @@ func NewFuzzer(data []byte, options ...FuzzerOpt) (fz *Fuzzer) {
 
 // Fill fills in most simple types, maps, slices, arrays, and recursively fills any public members of x.
 // It supports about 20 or so common interfaces, such as io.Reader, io.Writer, or io.ReadWriter.
-// See SupportedInterfaces for current list of suppored interfaces.
+// See SupportedInterfaces for current list of supported interfaces.
 // Callers pass in a pointer to the object to fill, such as:
 //    var i int
 //    Fill(&i)
@@ -188,7 +188,7 @@ type chainOpts struct {
 // all selected Steps in parallel, though most often prefers
 // to run only a portion of Steps in parallel in a single
 // Chain execution in order to increase deterministic behavior
-// and help the underlying fuzzing engine evolve interesting intputs.
+// and help the underlying fuzzing engine evolve interesting inputs.
 // Care is taken so that a given corpus will result in the same
 // Steps executing with the same arguments regardless of
 // whether or not ChainParallel is set.

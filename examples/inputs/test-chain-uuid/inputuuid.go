@@ -25,7 +25,7 @@ func (uuid MyUUID) MarshalBinary() ([]byte, error) { return nil, nil }
 // MyUUID2 is a second type that should also be picked up via 'fzgen -chain'.
 type MyUUID2 struct{}
 
-// This constructor returns a pointer, in constrast to NewFromBytes above.
+// This constructor returns a pointer, in contrast to NewFromBytes above.
 func NewMyUUID2() *MyUUID2 { return &MyUUID2{} }
 
 func (nu MyUUID2) Foo() ([]byte, error) { return nil, nil }

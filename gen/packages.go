@@ -1,4 +1,4 @@
-package fzgen
+package gen
 
 import (
 	"fmt"

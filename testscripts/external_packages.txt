@@ -18,7 +18,7 @@ env FZDEBUG=forcelocal=1
 fzgen tailscale.com/logtail/filch
 exists autofuzz_test.go
 
-# Check that we don't have an unexpectly package-qualified Options type used.
+# Check that we don't have an unexpectedly package-qualified Options type used.
 grep 'var opts Options' autofuzz_test.go
 ! grep 'var opts filch\.Options' autofuzz_test.go
 

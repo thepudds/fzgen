@@ -1,5 +1,5 @@
 # 'fzgen -h' shows fuzzing help. If there are multiple testscript failures including
-# this one, this is a good one to investiage first to see if there is a problem
+# this one, this is a good one to investigate first to see if there is a problem
 # with the testscript setup in general.
 
 fzgen -h

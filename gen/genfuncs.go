@@ -1,4 +1,4 @@
-package fzgen
+package gen
 
 import (
 	"bytes"
@@ -728,7 +728,7 @@ func constructorResult(f *types.Func) (n *types.Named, secondResultIsErr bool) {
 // isConstructor reports if f is a constructor.
 // It cannot have a receiver, must return a named type or pointer to named type
 // as its first return value, and can optionally have its second return value be type error.
-// This is a more narrow defintion than for example 'go doc',
+// This is a more narrow definition than for example 'go doc',
 // which allows any number of builtin types to be returned in addition to a single named type.
 func isConstructor(f *types.Func) bool {
 	// ctorResultN will be the named type if the returned type is a pointer to a named type.

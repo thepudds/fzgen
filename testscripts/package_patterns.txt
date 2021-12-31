@@ -33,7 +33,7 @@ rm autofuzz_test.go
 rm inner1/autofuzz_test.go
 rm inner2/autofuzz_test.go
 
-# Chains also work with mulitple packages.
+# Chains also work with multiple packages.
 fzgen -chain ./...
 cmp autofuzzchain_test.go testdata/outer/autofuzzchain_test.go
 cmp inner1/autofuzzchain_test.go testdata/inner1/autofuzzchain_test.go

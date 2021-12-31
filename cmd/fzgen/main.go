@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	gen "github.com/thepudds/fzgen/gen"
+	"github.com/thepudds/fzgen/gen"
 )
 
 func main() {
