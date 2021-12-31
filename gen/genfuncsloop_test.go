@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/tools/imports"
 )
 
 // to update golden files in ./testdata:
@@ -59,6 +60,10 @@ func TestChainRace(t *testing.T) {
 			out, err := emitChainWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
+			}
+			out, err = imports.Process("autofuzz_test.go", out, nil)
+			if err != nil {
+				t.Fatalf("imports.Process() failed: %v", err)
 			}
 
 			got := string(out)
@@ -128,6 +133,10 @@ func TestChainUUID(t *testing.T) {
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
 			}
+			out, err = imports.Process("autofuzz_test.go", out, nil)
+			if err != nil {
+				t.Fatalf("imports.Process() failed: %v", err)
+			}
 
 			got := string(out)
 			golden := filepath.Join("..", "testdata", tt.name)
@@ -189,6 +198,10 @@ func TestChainNilChecks(t *testing.T) {
 			out, err := emitChainWrappers(pkgPattern, functions, "examplefuzz", wrapperOpts)
 			if err != nil {
 				t.Fatalf("createWrappers() failed: %v", err)
+			}
+			out, err = imports.Process("autofuzz_test.go", out, nil)
+			if err != nil {
+				t.Fatalf("imports.Process() failed: %v", err)
 			}
 
 			got := string(out)

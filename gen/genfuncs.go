@@ -7,12 +7,10 @@ import (
 	"go/types"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/thepudds/fzgen/fuzzer"
 	"github.com/thepudds/fzgen/gen/internal/mod"
-	"golang.org/x/tools/imports"
 )
 
 type wrapperOptions struct {
@@ -112,25 +110,7 @@ func emitIndependentWrappers(pkgPattern string, functions []mod.Func, wrapperPkg
 		}
 	}
 
-	// fix up any needed imports.
-	// TODO: perf: this seems slower than expected. Check what style of path should be used for filename?
-	// imports.Process has this comment:
-	//   Note that filename's directory influences which imports can be chosen,
-	//   so it is important that filename be accurate.
-	filename, err := filepath.Abs(("autofuzz_test.go"))
-	warn := func(err error) {
-		fmt.Fprintln(os.Stderr, "genfuzzfuncs: warning: continuing after failing to automatically adjust imports:", err)
-	}
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	out, err := imports.Process(filename, buf.Bytes(), nil)
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	return out, nil
+	return buf.Bytes(), nil
 }
 
 // paramRepr contains string representations of inputParams to the wrapper function that we are
@@ -603,12 +583,12 @@ func avoidCollision(v *types.Var, i int, localPkg *types.Package, allWrapperPara
 
 	collision := false
 	switch paramName {
-	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2", "constraints", "version":
+	case localPkg.Name(), "t", "f", "fz", "data", "target", "steps", "result1", "result2", "tmp1", "tmp2", "constraints":
 		// avoid the common variable names for testing.T, testing.F, fzgen.Fuzzer,
 		// as well as variables we might emit (preferring an aesthetically pleasing
 		// name for something like "steps" in the common case over preserving
 		// a rare use of "steps" by a wrapped func).
-		// TODO: as temporary workaround, also exclude 'constraints' and 'version'.
+		// TODO: as temporary workaround, also exclude 'constraints'.
 		collision = true
 	default:
 		for _, p := range allWrapperParams {

@@ -7,11 +7,9 @@ import (
 	"go/types"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/thepudds/fzgen/gen/internal/mod"
-	"golang.org/x/tools/imports"
 )
 
 // emitChainWrappers emits a set of fuzzing wrappers where possible for the list of functions passed in.
@@ -137,26 +135,7 @@ func emitChainWrappers(pkgPattern string, functions []mod.Func, wrapperPkgName s
 		return nil, firstErr
 	}
 
-	// Fix up any needed imports.
-	// TODO: perf: this seems slower than expected. Check what style of path should be used for filename?
-	// imports.Process has this comment:
-	//   Note that filename's directory influences which imports can be chosen,
-	//   so it is important that filename be accurate.
-	// TODO: move this to fzgen.go
-	filename, err := filepath.Abs(("autofuzz_test.go"))
-	warn := func(err error) {
-		fmt.Fprintln(os.Stderr, "fzgen: warning: continuing after failing to automatically adjust imports:", err)
-	}
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	out, err := imports.Process(filename, buf.Bytes(), nil)
-	if err != nil {
-		warn(err)
-		return buf.Bytes(), nil
-	}
-	return out, nil
+	return buf.Bytes(), nil
 }
 
 // emitChainWrapper emits one fuzzing wrapper where possible for the list of functions passed in.
