@@ -136,9 +136,8 @@ jobs:
     strategy:
         fail-fast: false
         matrix:
-            os: [ubuntu-latest]
             external-repo: [tailscale, terraform_chain, terraform_nochain]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     defaults:
       run:
         # juggling $PATH is different in Windows PowerShell,

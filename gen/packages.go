@@ -184,7 +184,7 @@ func findFuncs(pkgPattern, funcPattern string, env []string, flags findFuncFlag)
 	}
 	// done looking
 	if len(result) == 0 {
-		return nil, fmt.Errorf("failed to find any functions for package pattern %q and func pattern %q", pkgPattern, funcPattern)
+		return nil, fmt.Errorf("no matching funcs found for package pattern %q", pkgPattern)
 	}
 	return result, nil
 }
