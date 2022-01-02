@@ -176,26 +176,25 @@ func FzgenMain() int {
 			out, err = emitIndependentWrappers(pkgs[i].pkgPath, pkgs[i], wrapperPkgName, wrapperOpts)
 		} else {
 			out, err = emitChainWrappers(pkgs[i].pkgPath, pkgs[i], wrapperPkgName, wrapperOpts)
-
-			// Handle certain common errors gracefully, including skipping & continuing if multiple target packages.
-			msgDest, msgPrefix := os.Stderr, "fzgen:"
+		}
+		// Handle certain common errors gracefully, including skipping & continuing if multiple target packages.
+		msgDest, msgPrefix := os.Stderr, "fzgen:"
+		if len(pkgs) > 1 {
+			msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
+		}
+		switch {
+		case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch), errors.Is(err, errNoSteps), errors.Is(err, errNoFunctionsMatch):
+			fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
 			if len(pkgs) > 1 {
-				msgDest, msgPrefix = os.Stdout, fmt.Sprintf("fzgen: skipping %s:", pkgs[i].pkgPath)
+				continue
 			}
-			switch {
-			case errors.Is(err, errUnsupportedParams), errors.Is(err, errNoMethodsMatch), errors.Is(err, errNoSteps), errors.Is(err, errNoFunctionsMatch):
-				fmt.Fprintf(msgDest, "%s %v\n", msgPrefix, err)
-				if len(pkgs) > 1 {
-					continue
-				}
-				return 1
-			case errors.Is(err, errNoConstructorsMatch):
-				fmt.Fprintf(msgDest, "%s %v for -ctor pattern %q\n", msgPrefix, err, *constructorPatternFlag)
-				if len(pkgs) > 1 {
-					continue
-				}
-				return 1
+			return 1
+		case errors.Is(err, errNoConstructorsMatch):
+			fmt.Fprintf(msgDest, "%s %v for -ctor pattern %q\n", msgPrefix, err, *constructorPatternFlag)
+			if len(pkgs) > 1 {
+				continue
 			}
+			return 1
 		}
 		if err != nil {
 			fail(err)
