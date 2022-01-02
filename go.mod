@@ -6,7 +6,7 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/rogpeppe/go-internal v1.8.1
 	github.com/sanity-io/litter v1.5.1
-	golang.org/x/tools v0.1.8
+	golang.org/x/tools v0.1.9-0.20211228192929-ee1ca4ffc4da
 )
 
 require (

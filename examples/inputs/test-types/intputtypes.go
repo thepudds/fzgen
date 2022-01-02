@@ -116,6 +116,5 @@ func Discard2(string, ...int) {}
 type Std struct{}
 
 func (Std) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
-	var conf net.ListenConfig
-	return conf.ListenPacket(ctx, network, address)
+	return nil, nil
 }
