@@ -48,6 +48,19 @@ func Fuzz_TypesNilCheck_WriteTo(f *testing.F) {
 	})
 }
 
+func Fuzz_Std_ListenPacket(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var _x1 fuzzwrapexamples.Std
+		var ctx context.Context
+		var network string
+		var address string
+		fz := fuzzer.NewFuzzer(data)
+		fz.Fill(&_x1, &ctx, &network, &address)
+
+		_x1.ListenPacket(ctx, network, address)
+	})
+}
+
 // skipping Fuzz_Discard because parameters include unsupported interface: []interface{}
 
 func Fuzz_Discard2(f *testing.F) {

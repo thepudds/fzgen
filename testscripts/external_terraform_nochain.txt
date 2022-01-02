@@ -22,6 +22,8 @@ exec gotip mod tidy
 exec gotip get github.com/thepudds/fzgen/fuzzer
 exec gotip get -d ./...
 fzgen ./...
-stdout 'fzgen: created 109 files'
+# stdout 'fzgen: created 109 files'
 exec gotip test -exec=true ./...
+exec bash -c 'find . -name "autofuzz_test.go" -exec egrep -L "^W*func" {} \; | wc -l'
+stdout '^0$'
 cd ..

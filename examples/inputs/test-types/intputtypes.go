@@ -111,3 +111,11 @@ func (n *TypesNilCheck) WriteTo(stream io.Writer) (int64, error) {
 func Discard(string, ...interface{}) {}
 
 func Discard2(string, ...int) {}
+
+// ListenPacket does not have a named receiver, and is modeled on tailscale.com/types/nettype
+type Std struct{}
+
+func (Std) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
+	var conf net.ListenConfig
+	return conf.ListenPacket(ctx, network, address)
+}

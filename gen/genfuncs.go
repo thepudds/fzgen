@@ -23,7 +23,7 @@ type emitFunc func(format string, args ...interface{})
 
 var (
 	errNoConstructorsMatch = errors.New("no matching constructor")
-	errNoFunctionsMatch    = errors.New("no functions found")
+	errNoFunctionsMatch    = errors.New("no fuzzable functions found")
 	errNoMethodsMatch      = errors.New("no methods found")
 	errNoSteps             = errors.New("no supported methods found")
 	errUnsupportedParams   = errors.New("unsupported parameters")
@@ -35,7 +35,7 @@ var (
 // type such as interface{}.
 func emitIndependentWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName string, options wrapperOptions) ([]byte, error) {
 	if len(pkgFuncs.functions) == 0 {
-		return nil, errNoFunctionsMatch
+		return nil, fmt.Errorf("%w: 0 matching functions", errNoFunctionsMatch)
 	}
 
 	// prepare the output
@@ -65,19 +65,25 @@ func emitIndependentWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName strin
 		return pkgFuncs.functions[i].TypesFunc.String() < pkgFuncs.functions[j].TypesFunc.String()
 	})
 
-	// loop over our the functions we are wrapping, emitting a wrapper where possible.
+	// Loop over our the functions we are wrapping, emitting a wrapper where possible.
+	// We only return an error if all fail.
+	var firstErr error
+	var success bool
 	for _, function := range pkgFuncs.functions {
 		var constructors []mod.Func
 		if options.insertConstructors {
 			constructors = pkgFuncs.constructors
 		}
 		err := emitIndependentWrapper(emit, function, constructors, options.qualifyAll)
-		if errors.Is(err, errSilentSkip) {
-			continue
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
-		if err != nil {
-			return nil, fmt.Errorf("error processing %s: %v", function.FuncName, err)
+		if err == nil {
+			success = true
 		}
+	}
+	if !success {
+		return nil, firstErr
 	}
 
 	return buf.Bytes(), nil
@@ -164,7 +170,7 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod
 	}
 	if len(inputParams) == 0 {
 		// skip this wrapper, not useful for fuzzing if no inputs (no receiver, no parameters).
-		return errSilentSkip
+		return fmt.Errorf("%w: %s has 0 input params", errNoFunctionsMatch, function.FuncName)
 	}
 
 	var paramReprs []paramRepr
@@ -176,10 +182,10 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support, _ := checkParamSupport(emit, inputParams, wrapperName)
+	support, unsupportedParam := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
 		// skip this wrapper. disallowedParams emitted a comment with more details.
-		return errSilentSkip
+		return fmt.Errorf("%w: %s", errUnsupportedParams, unsupportedParam)
 	}
 
 	// Start emitting the wrapper function!
