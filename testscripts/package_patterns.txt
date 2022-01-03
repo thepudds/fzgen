@@ -5,6 +5,10 @@
 # To update the golden files:
 #     go test -run=./patterns -end2end -update
 
+# Disable emitting the command line arguments in a comment
+# to make it easier to compare golden files created in different ways.
+env FZDEBUG=notopcomment=1
+
 # No arguments creates an autofuzz_test.go in the current directory.
 fzgen
 cmp autofuzz_test.go testdata/outer/autofuzz_test.go
@@ -130,7 +134,6 @@ func (i InnerInt2) Foo(a InnerInt2) {}
 -- testdata/outer/autofuzz_test.go --
 package outer
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"testing"
 
@@ -150,7 +153,6 @@ func Fuzz_OuterInt_Foo(f *testing.F) {
 -- testdata/inner1/autofuzz_test.go --
 package inner1
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"testing"
 
@@ -170,7 +172,6 @@ func Fuzz_InnerInt1_Foo(f *testing.F) {
 -- testdata/inner2/autofuzz_test.go --
 package inner2
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"testing"
 
@@ -190,7 +191,6 @@ func Fuzz_InnerInt2_Foo(f *testing.F) {
 -- testdata/outer/autofuzzchain_test.go --
 package outer
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"testing"
 
@@ -219,7 +219,6 @@ func Fuzz_New_Chain(f *testing.F) {
 -- testdata/inner1/autofuzzchain_test.go --
 package inner1
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"testing"
 
@@ -248,7 +247,6 @@ func Fuzz_New_Chain(f *testing.F) {
 -- testdata/inner2/autofuzzchain_test.go --
 package inner2
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"testing"
 
@@ -277,7 +275,6 @@ func Fuzz_New_Chain(f *testing.F) {
 -- testdata/inner1_not_local/autofuzz_test.go --
 package outer
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"example/inner1"
 	"testing"
@@ -298,7 +295,6 @@ func Fuzz_InnerInt1_Foo(f *testing.F) {
 -- testdata/inner1_not_local_dest_is_empty/autofuzz_test.go --
 package inner1fuzz
 
-// if needed, fill in imports or run 'goimports'
 import (
 	"example/inner1"
 	"testing"
