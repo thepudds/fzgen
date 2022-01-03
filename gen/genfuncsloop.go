@@ -323,10 +323,10 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support, _ := checkParamSupport(emit, inputParams, wrapperName)
+	support, unsupportedParam := checkParamSupport(emit, inputParams, wrapperName)
 	if support == noSupport {
 		// we can't emit this chain target.
-		return errUnsupportedParams
+		return fmt.Errorf("%w: %s", errUnsupportedParams, unsupportedParam)
 	}
 
 	// Start emitting the wrapper function!
