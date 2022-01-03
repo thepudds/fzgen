@@ -88,7 +88,7 @@ func FzgenMain() int {
 	}
 
 	if *parallelFlag && !*chainFlag {
-		fmt.Fprint(os.Stderr, "fzgen: error: -parallel flag requires -chain\n")
+		fmt.Fprint(os.Stderr, "fzgen: -parallel flag requires -chain\n")
 		return 2
 	}
 
@@ -103,13 +103,13 @@ func FzgenMain() int {
 	}
 	pkgs, err := findFuncsGrouped(pkgPattern, *funcPatternFlag, *constructorPatternFlag, options)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fzgen: error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "fzgen: %v\n", err)
 		return 1
 	}
 
 	// Check if we are looking at one package vs. multiple.
 	if len(pkgs) > 1 && hasPath(*outFileFlag) {
-		fmt.Fprint(os.Stderr, "fzgen: error: -o can only specify a file name and not a path when the package pattern matches multiple packages\n")
+		fmt.Fprint(os.Stderr, "fzgen:-o can only specify a file name and not a path when the package pattern matches multiple packages\n")
 		return 2
 	}
 
