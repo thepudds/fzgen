@@ -14,9 +14,10 @@ import (
 )
 
 type wrapperOptions struct {
-	qualifyAll         bool // qualify all variables with package name
-	insertConstructors bool // attempt to insert suitable constructors when wrapping methods
-	parallel           bool // set the Parallel flag in the emitted code, which allows steps of a chain to run in parallel
+	qualifyAll         bool   // qualify all variables with package name
+	insertConstructors bool   // attempt to insert suitable constructors when wrapping methods
+	parallel           bool   // set the Parallel flag in the emitted code, which allows steps of a chain to run in parallel
+	topComment         string // additional comment for top of generated file.
 }
 
 type emitFunc func(format string, args ...interface{})
@@ -47,7 +48,7 @@ func emitIndependentWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName strin
 
 	// emit the intro material
 	emit("package %s\n\n", wrapperPkgName)
-	emit("// if needed, fill in imports or run 'goimports'\n")
+	emit(options.topComment)
 	emit("import (\n")
 	emit("\t\"testing\"\n")
 	if options.qualifyAll {

@@ -86,8 +86,7 @@ func emitChainWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName string, opt
 
 	// Emit the intro material
 	emit("package %s\n\n", wrapperPkgName)
-	// TODO: also remove this trailing comment, probably
-	emit("// if needed, fill in imports or run 'goimports'\n")
+	emit(options.topComment)
 	emit("import (\n")
 	emit("\t\"testing\"\n")
 	if options.qualifyAll {
