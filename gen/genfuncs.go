@@ -73,8 +73,17 @@ func emitIndependentWrappers(pkgPath string, pkgFuncs *pkg, wrapperPkgName strin
 	for _, function := range pkgFuncs.functions {
 		var constructors []mod.Func
 		if options.insertConstructors {
-			constructors = pkgFuncs.constructors
+			for _, constructor := range pkgFuncs.constructors {
+				// Skip over any candidate constructors with unsupported params.
+				ctorInputParams := params(constructor.TypesFunc)
+				support, _ := checkParamSupport(ctorInputParams)
+				if support == noSupport {
+					continue
+				}
+				constructors = append(constructors, constructor)
+			}
 		}
+
 		err := emitIndependentWrapper(emit, function, constructors, options.qualifyAll)
 		if err != nil && firstErr == nil {
 			firstErr = err
@@ -664,6 +673,23 @@ func receiver(f *types.Func) *types.Named {
 		return nil
 	}
 	return n
+}
+
+// params expects a *types.Func that is type *types.Signature,
+// and returns a []*types.Var for the parameters.
+// This does not include the receiver for a method.
+// params returns nil if f is not type *types.Signature.
+func params(f *types.Func) []*types.Var {
+	wrappedSig, ok := f.Type().(*types.Signature)
+	if !ok {
+		return nil
+	}
+	var inputParams []*types.Var
+	for i := 0; i < wrappedSig.Params().Len(); i++ {
+		v := wrappedSig.Params().At(i)
+		inputParams = append(inputParams, v)
+	}
+	return inputParams
 }
 
 // constructorResult expects a *types.Func that is type *types.Signature,
