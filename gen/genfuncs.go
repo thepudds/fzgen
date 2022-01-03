@@ -183,9 +183,11 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support, unsupportedParam := checkParamSupport(emit, inputParams, wrapperName)
+
+	support, unsupportedParam := checkParamSupport(inputParams)
 	if support == noSupport {
-		// skip this wrapper. disallowedParams emitted a comment with more details.
+		// skip this wrapper.
+		emit("// skipping %s because parameters include func, chan, or unsupported interface: %v\n\n", wrapperName, unsupportedParam)
 		return fmt.Errorf("%w: %s", errUnsupportedParams, unsupportedParam)
 	}
 
@@ -375,7 +377,7 @@ const (
 // checkParamSupport reports the level of support across the input parameters.
 // It stops checking if it finds a param that is noSupport.
 // TODO: this is currently focuses on excluding the most common problems, and defaults to trying nativeSupport (which might cause cmd/go to complain).
-func checkParamSupport(emit emitFunc, allWrapperParams []*types.Var, wrapperName string) (paramSupport, string) {
+func checkParamSupport(allWrapperParams []*types.Var) (paramSupport, string) {
 	res := unknown
 	if len(allWrapperParams) == 0 {
 		// An easy case that is handled by cmd/go is no params at all.
@@ -439,12 +441,10 @@ func checkParamSupport(emit emitFunc, allWrapperParams []*types.Var, wrapperName
 		switch t.Underlying().(type) {
 		case *types.Interface:
 			if !fuzzer.SupportedInterfaces[t.String()] {
-				emit("// skipping %s because parameters include unsupported interface: %v\n\n", wrapperName, v.Type())
 				return noSupport, v.Type().String()
 			}
 			res = min(fillRequired, res)
 		case *types.Signature, *types.Chan:
-			emit("// skipping %s because parameters include unsupported func or chan: %v\n\n", wrapperName, v.Type())
 			return noSupport, v.Type().String()
 		}
 
