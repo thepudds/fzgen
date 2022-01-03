@@ -60,7 +60,7 @@ func Fuzz_Std_ListenPacket(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_Discard because parameters include unsupported interface: []interface{}
+// skipping Fuzz_Discard because parameters include func, chan, or unsupported interface: []interface{}
 
 func Fuzz_Discard2(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -113,7 +113,7 @@ func Fuzz_InterfacesShortList(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_InterfacesSkip because parameters include unsupported interface: net.Conn
+// skipping Fuzz_InterfacesSkip because parameters include func, chan, or unsupported interface: net.Conn
 
 func Fuzz_Short1(f *testing.F) {
 	f.Fuzz(func(t *testing.T, x1 int) {
@@ -232,6 +232,6 @@ func Fuzz_TypesShortListNoFill(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_TypesShortListSkip1 because parameters include unsupported func or chan: chan bool
+// skipping Fuzz_TypesShortListSkip1 because parameters include func, chan, or unsupported interface: chan bool
 
-// skipping Fuzz_TypesShortListSkip2 because parameters include unsupported func or chan: func(int)
+// skipping Fuzz_TypesShortListSkip2 because parameters include func, chan, or unsupported interface: func(int)

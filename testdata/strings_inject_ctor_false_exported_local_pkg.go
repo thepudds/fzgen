@@ -279,7 +279,7 @@ func Fuzz_Fields(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_FieldsFunc because parameters include unsupported func or chan: func(rune) bool
+// skipping Fuzz_FieldsFunc because parameters include func, chan, or unsupported interface: func(rune) bool
 
 func Fuzz_HasPrefix(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string, prefix string) {
@@ -311,7 +311,7 @@ func Fuzz_IndexByte(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_IndexFunc because parameters include unsupported func or chan: func(rune) bool
+// skipping Fuzz_IndexFunc because parameters include func, chan, or unsupported interface: func(rune) bool
 
 func Fuzz_IndexRune(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string, r rune) {
@@ -348,9 +348,9 @@ func Fuzz_LastIndexByte(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_LastIndexFunc because parameters include unsupported func or chan: func(rune) bool
+// skipping Fuzz_LastIndexFunc because parameters include func, chan, or unsupported interface: func(rune) bool
 
-// skipping Fuzz_Map because parameters include unsupported func or chan: func(rune) rune
+// skipping Fuzz_Map because parameters include func, chan, or unsupported interface: func(rune) rune
 
 func Fuzz_NewReader(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string) {
@@ -479,7 +479,7 @@ func Fuzz_Trim(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_TrimFunc because parameters include unsupported func or chan: func(rune) bool
+// skipping Fuzz_TrimFunc because parameters include func, chan, or unsupported interface: func(rune) bool
 
 func Fuzz_TrimLeft(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string, cutset string) {
@@ -487,7 +487,7 @@ func Fuzz_TrimLeft(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_TrimLeftFunc because parameters include unsupported func or chan: func(rune) bool
+// skipping Fuzz_TrimLeftFunc because parameters include func, chan, or unsupported interface: func(rune) bool
 
 func Fuzz_TrimPrefix(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string, prefix string) {
@@ -501,7 +501,7 @@ func Fuzz_TrimRight(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_TrimRightFunc because parameters include unsupported func or chan: func(rune) bool
+// skipping Fuzz_TrimRightFunc because parameters include func, chan, or unsupported interface: func(rune) bool
 
 func Fuzz_TrimSpace(f *testing.F) {
 	f.Fuzz(func(t *testing.T, s string) {

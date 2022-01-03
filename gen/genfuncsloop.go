@@ -322,9 +322,10 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support, unsupportedParam := checkParamSupport(emit, inputParams, wrapperName)
+	support, unsupportedParam := checkParamSupport(inputParams)
 	if support == noSupport {
 		// we can't emit this chain target.
+		emit("// skipping %s because parameters include func, chan, or unsupported interface: %v\n\n", wrapperName, unsupportedParam)
 		return fmt.Errorf("%w: %s", errUnsupportedParams, unsupportedParam)
 	}
 
@@ -466,9 +467,10 @@ func emitChainStep(emit emitFunc, function mod.Func, constructor mod.Func, quali
 
 	// Check if we have an interface or function pointer in our desired parameters,
 	// which we can't fill with values during fuzzing.
-	support, _ := checkParamSupport(emit, inputParams, wrapperName)
+	support, unsupportedParam := checkParamSupport(inputParams)
 	if support == noSupport {
-		// skip this wrapper. disallowedParams emitted a comment with more details.
+		// skip this wrapper.
+		emit("// skipping %s because parameters include func, chan, or unsupported interface: %v\n\n", wrapperName, unsupportedParam)
 		return errSilentSkip
 	}
 

@@ -48,4 +48,4 @@ func Fuzz_FuncExportedUsesSupportedInterface(f *testing.F) {
 	})
 }
 
-// skipping Fuzz_FuncExportedUsesUnsupportedInterface because parameters include unsupported interface: github.com/thepudds/fzgen/examples/inputs/test-exported.ExportedInterface
+// skipping Fuzz_FuncExportedUsesUnsupportedInterface because parameters include func, chan, or unsupported interface: github.com/thepudds/fzgen/examples/inputs/test-exported.ExportedInterface
