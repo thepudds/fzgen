@@ -326,7 +326,7 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 	if support == noSupport {
 		// we can't emit this chain target.
 		emit("// skipping %s because parameters include func, chan, or unsupported interface: %v\n\n", wrapperName, unsupportedParam)
-		return fmt.Errorf("%w: %s", errUnsupportedParams, unsupportedParam)
+		return fmt.Errorf("%w: %s takes %s", errUnsupportedParams, function.FuncName, unsupportedParam)
 	}
 
 	// Start emitting the wrapper function!

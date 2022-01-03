@@ -68,7 +68,7 @@ func FzgenMain() int {
 	chainFlag := flag.Bool("chain", false, "loop over the methods of an object, which requires finding a suitable constructor in the same package and which is controllable via the -ctor flag.")
 	parallelFlag := flag.Bool("parallel", false, "indicates an emitted chain can be run in parallel. requires -chain")
 	outFileFlag := flag.String("o", "autofuzz_test.go", "output file name. defaults to autofuzz_test.go or autofuzzchain_test.go")
-	constructorPatternFlag := flag.String("ctor", "^New", "regexp to use if searching for constructors to automatically use.")
+	constructorPatternFlag := flag.String("ctor", ".", "regexp to use if searching for constructors to automatically use.")
 
 	// Less commonly used:
 	funcPatternFlag := flag.String("func", ".", "function regex, defaults to matching all candidate functions")
