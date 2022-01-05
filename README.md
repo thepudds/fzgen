@@ -248,12 +248,12 @@ If you look back at the reproducer included above, you can see it "discovered" a
 
 For this bug, it usually takes hundreds of thousands of coverage-guided runtime variations of call patterns and inputs before hitting this data race. The reproducer emitted was a code-based rendition of the first runtime variation to trigger the race detector.
 
-#### Would the race detector find this bug with a trivial test?
+#### Would the race detector find that bug with a trivial test?
 
-Just running a regular test under the race detector might not catch this bug, including because the race detector [only finds data races that happen at execution time](https://go.dev/blog/race-detector), which means a diversity of code paths and input data are important for the race detector to do its job.
+Just running a regular test under the race detector might not catch that bug, including because the race detector [only finds data races that happen at execution time](https://go.dev/blog/race-detector), which means a diversity of code paths and input data are important for the race detector to do its job.
 fz.Chain helps supply those code paths and data.
 
-For this [example bug](https://github.com/thepudds/fzgen/blob/main/examples/inputs/race/race.go#L34-L36) to be observable by the race detector, it requires:
+For that bug to be observable by the race detector, [it](https://github.com/thepudds/fzgen/blob/main/examples/inputs/race/race.go#L34-L36) requires:
 
   1. A Store must complete, then be followed by two Loads, and all three must use the same key.
   2. The Store must have certain payload data (`Answer: 42`).
