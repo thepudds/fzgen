@@ -218,23 +218,26 @@ At execution time, fz.Chain does not just run the steps in the order listed in t
 
 Here is a simplified picture showing this relationship:
 ```
-     CODE GEN     |                 FUZZING EXECUTION                      
-  -----------------------------------------------------------------------
-                  |                                        
-   List of Steps  |  Execution Chain 1     ...    Execution Chain 173,321                                       
-                  |                              
-    ┌──────────┐  |   ┌──────────┐                   ┌──────────┐
-    │ Method A │  |   │ Method C │--+ C's         +--│ Method B │
-    └──────────┘  |   └──────────┘  │ return      │  └──────────┘          
-    ┌──────────┐  |                 │ value       │
-    │ Method B │  | +---------------+             │  Reuse B's input arg for A & C
-    └──────────┘  | │                             │  Run A & C in parallel
-    ┌──────────┐  | │  ┌──────────┐               │
-    │ Method C │  | +->│ Method B │               +-----------------+              
-    └──────────┘  |    └──────────┘               │                 │           
-                  |                               │  ┌──────────┐   │  ┌──────────┐
-                  |                               +->│ Method A │   +->│ Method C │ 
-                  |                                  └──────────┘      └──────────┘
+      CODE GEN     |                 FUZZING EXECUTION
+  ---------------------------------------------------------------------------
+                   |
+   List of Steps   |    Execution Chain 1     ...     Execution Chain 173,321
+                   |
+    ┌──────────┐   |       New input                     Interesting input
+    │ Method A │   |           |                               |
+    └──────────┘   |           v                               v
+    ┌──────────┐   |     ┌──────────┐                    ┌──────────┐
+    │ Method B │   |     │ Method C │--+ C's          +--│ Method D │
+    └──────────┘   |     └──────────┘  │ return       │  └──────────┘
+    ┌──────────┐   |                   │ value        │
+    │ Method C │   |   +---------------+              │  Run A and C in parallel
+    └──────────┘   |   │                              │  Reuse D's input arg for A & C
+    ┌──────────┐   |   │  ┌──────────┐                │
+    │ Method D │   |   +->│ Method B │                +-----------------+
+    └──────────┘   |      └──────────┘                │                 │
+                   |                                  │  ┌──────────┐   │  ┌──────────┐
+                   |                                  +->│ Method A │   +->│ Method C │
+                   |                                     └──────────┘      └──────────┘
 ```
 
 #### What did the -parallel flag do?
