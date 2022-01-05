@@ -214,7 +214,7 @@ Finally, the most important line in that file is:
     fz.Chain(steps, fuzzer.ChainParallel)
 ```
 
-At execution time, fz.Chain does not just run the steps in the order listed in the code. Rather, it "chains" them together in novel ways with different interesting arguments. For example, the code might list the steps A, B, C, D, but at execution time, fz.Chain might call first call C with some interesting arguments, then take C's return value and pass it to B, then call A twice, then restart with a completely different sequence and arguments. In other words, the steps describe a universe of possibilities, and at execution time fz.Chain guides the underlying fuzzing engine towards interesting calling patterns & arguments within that universe, where the coverage guidance from method Foo can help progress method Bar and vice versa under the full generality a fuzzer can produce.
+At execution time, fz.Chain does not just run the steps in the order listed in the code. Rather, it "chains" them together in novel ways with different interesting arguments. For example, the code might list the steps A, B, C, D, but at execution time, fz.Chain might call first call C with some interesting arguments, then take C's return value and pass it to B if B has a matching type, then call A twice, then restart with a completely different sequence and arguments. In other words, the steps describe a universe of possibilities, and at execution time fz.Chain guides the underlying fuzzing engine towards interesting calling patterns & arguments within that universe, where the coverage guidance from method Foo can help progress method Bar and vice versa under the full generality a fuzzer can produce.
 
 Here is a simplified picture showing this relationship:
 ```
