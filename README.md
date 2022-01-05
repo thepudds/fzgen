@@ -216,6 +216,27 @@ Finally, the most important line in that file is:
 
 At execution time, fz.Chain does not just run the steps in the order listed in the code. Rather, it "chains" them together in novel ways with different interesting arguments. For example, the code might list the steps A, B, C, D, but at execution time, fz.Chain might call first call C with some interesting arguments, then take C's return value and pass it to B, then call A twice, then restart with a completely different sequence and arguments. In other words, the steps describe a universe of possibilities, and at execution time fz.Chain guides the underlying fuzzing engine towards interesting calling patterns & arguments within that universe, where the coverage guidance from method Foo can help progress method Bar and vice versa under the full generality a fuzzer can produce.
 
+Here is a simplified picture showing this relationship:
+```
+     CODE GEN     |                 FUZZING EXECUTION                      
+  -----------------------------------------------------------------------
+                  |                                        
+   List of Steps  |  Execution Chain 1     ...    Execution Chain 173,321                                       
+                  |                              
+    ┌──────────┐  |   ┌──────────┐                   ┌──────────┐
+    │ Method A │  |   │ Method C │--+ C's         +--│ Method B │
+    └──────────┘  |   └──────────┘  │ return      │  └──────────┘          
+    ┌──────────┐  |                 │ value       │
+    │ Method B │  | +---------------+             │  Reuse B's input arg for A & C
+    └──────────┘  | │                             │  Run A & C in parallel
+    ┌──────────┐  | │  ┌──────────┐               │
+    │ Method C │  | +->│ Method B │               +-----------------+              
+    └──────────┘  |    └──────────┘               │                 │           
+                  |                               │  ┌──────────┐   │  ┌──────────┐
+                  |                               +->│ Method A │   +->│ Method C │ 
+                  |                                  └──────────┘      └──────────┘
+```
+
 #### What did the -parallel flag do?
 
 Because the call to fz.Chain includes the `fuzzer.ChainParallel` option due to the `-parallel` flag, fz.Chain simultaneously explores at execution time which operations run in parallel vs. sequentially, the timing of parallel calls, and so on, in an effort to trigger different types of concurrency bugs. Because concurrent operations can be nondeterministic and nondeterministism is a challenge for a coverage-guided fuzzing engine, fz.Chain also attempts to balance enough deterministic behavior to help the underlying fuzzing engine find interesting inputs.
