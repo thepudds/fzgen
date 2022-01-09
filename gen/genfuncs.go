@@ -183,11 +183,11 @@ func emitIndependentWrapper(emit emitFunc, function mod.Func, constructors []mod
 		return fmt.Errorf("%w: %s has 0 input params", errNoFunctionsMatch, function.FuncName)
 	}
 
-	var paramReprs []paramRepr
+	paramReprs := make([]paramRepr, len(inputParams))
 	for i, v := range inputParams {
 		typeStringWithSelector := types.TypeString(v.Type(), defaultQualifier)
 		paramName := avoidCollision(v, i, localPkg, inputParams)
-		paramReprs = append(paramReprs, paramRepr{paramName: paramName, typ: typeStringWithSelector, v: v})
+		paramReprs[i] = paramRepr{paramName: paramName, typ: typeStringWithSelector, v: v}
 	}
 
 	// Check if we have an interface or function pointer in our desired parameters,

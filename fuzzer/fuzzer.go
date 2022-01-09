@@ -268,7 +268,7 @@ func (fz *Fuzzer) chain(steps []Step, pl plan.Plan) {
 	// Second, create our list of execCalls based on the list of plan.Calls.
 	// We do not yet fully populate the arguments for an execCall,
 	// which we will do on a subsequent pass.
-	var execCalls []execCall
+	execCalls := make([]execCall, len(pl.Calls))
 	for i := range pl.Calls {
 		// Based on the plan, compute index into the user's Step list.
 		s := int(pl.Calls[i].StepIndex) % len(steps)
@@ -281,7 +281,7 @@ func (fz *Fuzzer) chain(steps []Step, pl plan.Plan) {
 			args:     []argument{}, // empty to start, we will fill in below.
 		}
 
-		execCalls = append(execCalls, ec)
+		execCalls[i] = ec
 	}
 
 	// Third, create arguments as needed for each execCall,
