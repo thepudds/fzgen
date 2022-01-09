@@ -313,11 +313,11 @@ func emitChainTarget(emit emitFunc, function mod.Func, qualifyAll bool) error {
 		inputParams = append(inputParams, v)
 	}
 
-	var paramReprs []paramRepr
+	paramReprs := make([]paramRepr, len(inputParams))
 	for i, v := range inputParams {
 		typeStringWithSelector := types.TypeString(v.Type(), defaultQualifier)
 		paramName := avoidCollision(v, i, localPkg, inputParams)
-		paramReprs = append(paramReprs, paramRepr{paramName: paramName, typ: typeStringWithSelector, v: v})
+		paramReprs[i] = paramRepr{paramName: paramName, typ: typeStringWithSelector, v: v}
 	}
 
 	// Check if we have an interface or function pointer in our desired parameters,
@@ -458,11 +458,11 @@ func emitChainStep(emit emitFunc, function mod.Func, constructor mod.Func, quali
 		inputParams = append(inputParams, v)
 	}
 
-	var paramReprs []paramRepr
+	paramReprs := make([]paramRepr, len(inputParams))
 	for i, v := range inputParams {
 		typeStringWithSelector := types.TypeString(v.Type(), defaultQualifier)
 		paramName := avoidCollision(v, i, localPkg, inputParams)
-		paramReprs = append(paramReprs, paramRepr{paramName: paramName, typ: typeStringWithSelector, v: v})
+		paramReprs[i] = paramRepr{paramName: paramName, typ: typeStringWithSelector, v: v}
 	}
 
 	// Check if we have an interface or function pointer in our desired parameters,
