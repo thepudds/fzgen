@@ -283,8 +283,7 @@ Fortunately, once a problem is reported, we can paste the output of `FZDEBUG=rep
 * fzgen is still a work in progress, but hopefully will soon be approaching beta quality. 
 * Emitting reproducers for a chain is currently best effort, but the intent is to improve to creating a complete standalone reproducer.
 * Corpus encoding in particular will change in the near term.
-* Roughly around the time of Go 1.18 graduating from Beta, the current intent is that fzgen will reach a v1.0.0 status.
-    * By v1.0.0, fzgen will have a stable corpus encoding, or an equivalent (such as perhaps the ability to programmatically set an encoding version number to keep using a corpus that is an older fzgen encoding).
+* By v1.0.0, fzgen will have a stable corpus encoding, or an equivalent (such as perhaps the ability to programmatically set an encoding version number to keep using a corpus that is an older fzgen encoding).
 
 ## What next?
 
