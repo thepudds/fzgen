@@ -49,8 +49,7 @@ jobs:
       run: |
         echo "$PATH"
         go version
-        # gha currently defaulting to go 1.15. This would need to change for later version.
-        go get golang.org/dl/gotip
+        go install golang.org/dl/gotip@latest
         gotip download
     - name: Test (-end2end, with gotip invoked as gotip)
       run: |
@@ -94,8 +93,7 @@ jobs:
       run: |
         echo "$PATH"
         go version
-        # gha currently defaulting to go 1.15. This would need to change for later version.
-        go get golang.org/dl/gotip
+        go install golang.org/dl/gotip@latest
         gotip download
     - name: Setup gotip as default go
       run: |
@@ -165,8 +163,7 @@ jobs:
       run: |
         echo "$PATH"
         go version
-        # gha currently defaulting to go 1.15. This would need to change for later version.
-        go get golang.org/dl/gotip
+        go install golang.org/dl/gotip@latest
         gotip download
     - name: Setup gotip as default go
       run: |
