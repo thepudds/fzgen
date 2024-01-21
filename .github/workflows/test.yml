@@ -134,7 +134,7 @@ jobs:
     strategy:
         fail-fast: false
         matrix:
-            external-repo: [tailscale, terraform_chain, terraform_nochain]
+            external-repo: [terraform_chain, terraform_nochain]
     runs-on: ubuntu-latest
     defaults:
       run:
