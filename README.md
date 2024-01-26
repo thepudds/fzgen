@@ -55,7 +55,7 @@ fuzz: elapsed: 0s, minimizing
 
 Without any manual work, you just found a bug in the standard library. (It's a very minor bug though — probably at the level of "perhaps the doc could be more explicit about an expected panic").
 
-A more complex calling sequence is possible via the `-chain` flag, which allows automatic looping over the methods of an object, including automatically passing outputs of one method as input to another method. [See below](https://github.com/thepudds/fzgen#example-easily-finding-a-data-race) for an example use of `-chain`. 
+A more complex calling sequence is possible via the `-chain` flag, which allows automatic looping over the methods of an object, including automatically passing outputs of one method as input to another method. [See below](#example-easily-finding-a-data-race) for an example use of `-chain`. 
 
 That's enough for you to get started on your own, but let's also briefly look at a more interesting example.
 
