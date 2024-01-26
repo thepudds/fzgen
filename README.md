@@ -1,6 +1,6 @@
 # fzgen
 
-fzgen auto-generates fuzzing wrappers for Go 1.18, optionally finds problematic API call sequences and concurrency bugs, can automatically wire together outputs & inputs across API calls, and supports fuzzing complex types such as structs, maps and common interfaces.
+fzgen auto-generates fuzzing wrappers for `go test`, optionally finds problematic API call sequences and concurrency bugs, can automatically wire together outputs & inputs across API calls, and supports fuzzing complex types such as structs, maps and common interfaces.
 
 ## Why?
 
@@ -19,13 +19,9 @@ If enough people work to make the fuzzing ecosystem accessible enough, "coffee b
 
 ## Quick Start: Install & Automatically Create Fuzz Targets
 
-For now, the recommendation is to use Go 1.17 for almost all the commands here, and then use [gotip](https://pkg.go.dev/golang.org/dl/gotip) as shown when it is time to kick off the fuzzing.
-
-Starting from an empty directory, create a module and install the dev version of Go 1.18 via gotip:
+Starting from an empty directory, create a module:
 ```
 $ go mod init example
-$ go install golang.org/dl/gotip@latest
-$ gotip download
 ```
 
 Download and install the fzgen binary from source, as well as add its fuzzer to our go.mod:
@@ -42,7 +38,7 @@ fzgen: created autofuzz_test.go
 
 That's it — now we can start fuzzing!
 ```
-$ gotip test -fuzz=Fuzz_Encode
+$ go test -fuzz=Fuzz_Encode
 ```
 
 Within a few seconds, you should get a crash:
@@ -68,14 +64,14 @@ A different example is `fzgen github.com/google/syzkaller/pkg/report`, which gen
 Let's look at one of them more closely — the code targeting the [Symbolize](https://pkg.go.dev/github.com/google/syzkaller@v0.0.0-20220105142835-6acc789ad3f6/pkg/report#Reporter.Symbolize) method on the [Reporter](https://pkg.go.dev/github.com/google/syzkaller@v0.0.0-20220105142835-6acc789ad3f6/pkg/report#Reporter) type, along with some added explanatory comments:
 
 ```go
-// Fuzz_Reporter_Symbolize has the standard signature for Go 1.18 fuzzing.
+// Fuzz_Reporter_Symbolize has the standard signature for Go fuzzing.
 func Fuzz_Reporter_Symbolize(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// fzgen declared variables for two structs.
 		var cfg *mgrconfig.Config
 		var rep *report.Report
 
-		// Structs are not natively supported by Go 1.18, so fzgen created an auxiliary fuzzer
+		// Structs are not natively supported by 'go test', so fzgen created an auxiliary fuzzer
 		// that fills in the cfg & rep structs with arbitrary data via fz.Fill.
 		fz := fuzzer.NewFuzzer(data)
 		fz.Fill(&cfg, &rep)
@@ -128,7 +124,7 @@ That's it! Let's get fuzzing.
 
 This time, we also enable the race detector as we fuzz:
 ```
-$ gotip test -fuzz=. -race
+$ go test -fuzz=. -race
 ```
 
 This is a harder challenge than our first example, but within several minutes or so, you should get a data race detected:
@@ -144,7 +140,7 @@ example will have a different filename and show a different pattern of calls).
 
 ```
 $ export FZDEBUG=repro=1                   # On Windows:  set FZDEBUG=repro=1
-$ gotip test -run=./9800b52 -race
+$ go test -run=./9800b52 -race
 ```
 
 This will output a snippet of valid Go code that was "discovered" at execution time by fuzzing:
