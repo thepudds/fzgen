@@ -608,7 +608,7 @@ func (f *Fuzzer) fill(v reflect.Value, depth int, opts fillOpts) {
 // For complex kinds, instead draw two floats.
 func (f *Fuzzer) numericDraw(k reflect.Kind) (bits uint64) {
 	switch k {
-	case reflect.Int, reflect.Int64, reflect.Uint64, reflect.Float64:
+	case reflect.Int, reflect.Uint, reflect.Int64, reflect.Uint64, reflect.Float64:
 		// reflect.Int always uses 8 bytes for consistency  across platforms.
 		if f.Remaining() < 8 {
 			return 0
